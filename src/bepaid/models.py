@@ -760,4 +760,49 @@ class SplitPaymentResponse(CamelModel):
     splits: list[SplitItem]
 
 
+# ── pay-by-link products ─────────────────────────────────────────────────────
+
+
+class ProductCreateRequest(BaseModel):
+    name: str
+    description: str
+    currency: str
+    amount: int
+    quantity: str | None = None
+    infinite: bool | None = None
+    visible_fields: list[str] | None = None
+    test: bool | None = None
+    immortal: bool | None = None
+    expired_at: str | None = None
+    return_url: str | None = None
+    shop_id: str | None = None
+    language: str | None = None
+    transaction_type: str | None = None
+
+
+class ProductUpdateRequest(BaseModel):
+    amount: int | None = None
+    infinite: bool | None = None
+    quantity: str | None = None
+
+
+class Product(CamelModel):
+    id: str | None = None
+    name: str | None = None
+    description: str | None = None
+    currency: str | None = None
+    amount: int | None = None
+    quantity: int | None = None
+    infinite: bool | None = None
+    language: str | None = None
+    transaction_type: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+    test: bool | None = None
+    additional_data: dict[str, Any] | None = None
+    pay_url: str | None = None
+    payment_url: str | None = None
+    confirm_url: str | None = None
+
+
 WebhookNotification.model_rebuild()

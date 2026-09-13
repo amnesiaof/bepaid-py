@@ -17,6 +17,8 @@ from bepaid.models import (
     P2pRequest,
     PaymentRequest,
     PayoutRequest,
+    ProductCreateRequest,
+    ProductUpdateRequest,
     ReportCountParams,
     ReportCountRequest,
     SplitAdditionalData,
@@ -305,5 +307,50 @@ async def test_async_split_payment() -> None:
         )
         assert len(r.splits) == 2
         assert r.splits[0].parent is True
+    finally:
+        await c.aclose()
+
+
+@pytest.mark.asyncio
+async def test_async_products() -> None:
+    product = {
+        "id": "prd_ed27b047d3ccd1a6",
+        "name": "product",
+        "description": "description",
+        "currency": "USD",
+        "amount": 990,
+        "quantity": 10,
+        "infinite": False,
+        "language": "en",
+        "transaction_type": "payment",
+        "created_at": "2022-12-20T18:54:42.033Z",
+        "updated_at": "2022-12-20T18:54:42.033Z",
+        "test": False,
+        "additional_data": {},
+        "pay_url": "https://api.bepaid.by/products/prd_ed27b047d3ccd1a6/pay",
+        "payment_url": "https://api.bepaid.by/products/prd_ed27b047d3ccd1a6/pay",
+        "confirm_url": "https://checkout.bepaid.by/v2/confirm_order/prd_ed27b047d3ccd1a6/1",
+    }
+    c = async_client(
+        {
+            ("POST", "/products"): {"json": product},
+            ("GET", "/products"): {"json": [product]},
+            ("PUT", "/products/prd_1"): {"status": 204},
+        }
+    )
+    try:
+        created = await c.create_product(
+            ProductCreateRequest(
+                name="product",
+                description="description",
+                currency="USD",
+                amount=990,
+                quantity="10",
+            )
+        )
+        assert created.id == "prd_ed27b047d3ccd1a6"
+        listed = await c.list_products()
+        assert len(listed) == 1
+        await c.update_product("prd_1", ProductUpdateRequest(amount=950, quantity="5"))
     finally:
         await c.aclose()

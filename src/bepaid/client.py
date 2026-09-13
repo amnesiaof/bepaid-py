@@ -44,6 +44,9 @@ from .models import (
     PayoutRequest,
     PayoutResponse,
     PlanItem,
+    Product,
+    ProductCreateRequest,
+    ProductUpdateRequest,
     RefundRequest,
     RefundResponse,
     ReportCountRequest,
@@ -140,6 +143,8 @@ class AsyncBepaidClient:
                 message=data.get("message", resp.text),
                 errors=data.get("errors"),
             )
+        if not resp.content:
+            return {}
         return resp.json()
 
     # ── gateway API ────────────────────────────────────────────────────────
@@ -391,6 +396,34 @@ class AsyncBepaidClient:
         )
         return SplitPaymentResponse.model_validate(data)
 
+    # ── pay-by-link products ────────────────────────────────────────────────
+
+    async def create_product(self, req: ProductCreateRequest) -> Product:
+        data = await self._request(
+            "POST",
+            f"{self._base_api}/products",
+            req.model_dump(by_alias=True, exclude_none=True),
+        )
+        return Product.model_validate(data)
+
+    async def list_products(self) -> list[Product]:
+        data = await self._request("GET", f"{self._base_api}/products")
+        return [Product.model_validate(item) for item in data]
+
+    async def get_product(self, product_id: str) -> Product:
+        data = await self._request(
+            "GET",
+            f"{self._base_api}/products/{product_id}",
+        )
+        return Product.model_validate(data)
+
+    async def update_product(self, product_id: str, req: ProductUpdateRequest) -> None:
+        await self._request(
+            "PUT",
+            f"{self._base_api}/products/{product_id}",
+            req.model_dump(by_alias=True, exclude_none=True),
+        )
+
 
 class BepaidClient:
     """Synchronous wrapper around :class:`AsyncBepaidClient`.
@@ -560,6 +593,20 @@ class BepaidClient:
 
     def create_split_payment(self, req: SplitPaymentRequest) -> SplitPaymentResponse:
         return self._invoke("create_split_payment", req)
+
+    # ── pay-by-link products ────────────────────────────────────────────────
+
+    def create_product(self, req: ProductCreateRequest) -> Product:
+        return self._invoke("create_product", req)
+
+    def list_products(self) -> list[Product]:
+        return self._invoke("list_products")
+
+    def get_product(self, product_id: str) -> Product:
+        return self._invoke("get_product", product_id)
+
+    def update_product(self, product_id: str, req: ProductUpdateRequest) -> None:
+        self._invoke("update_product", product_id, req)
 
 
 # ── webhook helpers ──────────────────────────────────────────────────────────

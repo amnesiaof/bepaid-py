@@ -28,6 +28,8 @@ from bepaid.models import (
     PayoutCustomer,
     PayoutRequest,
     PlanItem,
+    ProductCreateRequest,
+    ProductUpdateRequest,
     RefundRequest,
     ReportCountParams,
     ReportCountRequest,
@@ -64,7 +66,7 @@ class MockTransport(httpx.MockTransport):
             assert json.loads(request.content) == spec["expect_body"]
         return httpx.Response(
             spec.get("status", 200),
-            json=spec["json"],
+            json=spec.get("json"),
             request=request,
         )
 
@@ -716,3 +718,62 @@ def test_create_split_payment_happy_path() -> None:
     assert len(r.splits) == 2
     assert r.splits[0].parent is True
     assert r.splits[1].parent_uid == "21-99834feb0b"
+
+
+_PRODUCT = {
+    "id": "prd_ed27b047d3ccd1a6",
+    "name": "product",
+    "description": "description of product",
+    "currency": "USD",
+    "amount": 990,
+    "quantity": 10,
+    "infinite": False,
+    "language": "en",
+    "transaction_type": "payment",
+    "created_at": "2022-12-20T18:54:42.033Z",
+    "updated_at": "2022-12-20T18:54:42.033Z",
+    "test": False,
+    "additional_data": {},
+    "pay_url": "https://api.bepaid.by/products/prd_ed27b047d3ccd1a6/pay",
+    "payment_url": "https://api.bepaid.by/products/prd_ed27b047d3ccd1a6/pay",
+    "confirm_url": "https://checkout.bepaid.by/v2/confirm_order/prd_ed27b047d3ccd1a6/1",
+}
+
+
+def test_create_product_happy_path() -> None:
+    c = client({("POST", "/products"): {"json": _PRODUCT}})
+    r = c.create_product(
+        ProductCreateRequest(
+            name="product",
+            description="description of product",
+            currency="USD",
+            amount=990,
+            quantity="10",
+            language="en",
+            transaction_type="payment",
+        )
+    )
+    assert r.id == "prd_ed27b047d3ccd1a6"
+    assert r.amount == 990
+    assert r.pay_url == "https://api.bepaid.by/products/prd_ed27b047d3ccd1a6/pay"
+
+
+def test_list_products_happy_path() -> None:
+    c = client({("GET", "/products"): {"json": [_PRODUCT]}})
+    r = c.list_products()
+    assert len(r) == 1
+    assert r[0].id == "prd_ed27b047d3ccd1a6"
+
+
+def test_get_product_happy_path() -> None:
+    c = client({("GET", "/products/prd_ed27b047d3ccd1a6"): {"json": _PRODUCT}})
+    r = c.get_product("prd_ed27b047d3ccd1a6")
+    assert r.id == "prd_ed27b047d3ccd1a6"
+
+
+def test_update_product_happy_path() -> None:
+    c = client({("PUT", "/products/prd_1"): {"status": 204}})
+    c.update_product(
+        "prd_1",
+        ProductUpdateRequest(amount=950, infinite=False, quantity="5"),
+    )
