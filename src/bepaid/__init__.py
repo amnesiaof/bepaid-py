@@ -4,4 +4,4 @@ from .client import AsyncBepaidClient, BepaidClient
 from .errors import ApiError, BepaidError
 
 __all__ = ["ApiError", "AsyncBepaidClient", "BepaidClient", "BepaidError"]
-__version__ = "0.2.1"
+__version__ = "0.3.0"

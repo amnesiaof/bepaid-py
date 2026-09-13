@@ -18,22 +18,31 @@ from pydantic import BaseModel
 
 from .errors import ApiError
 from .models import (
+    ApmConfirmRequest,
+    ApmConfirmResponse,
     ApmPaymentRequest,
     ApmPaymentResponse,
     ApmRefundRequest,
     ApmRefundResponse,
     AuthorizationRequest,
     AuthorizationResponse,
+    CancelSubscriptionRequest,
     CaptureRequest,
     CaptureResponse,
     CheckoutRequest,
     CheckoutResponse,
     CheckoutStatus,
     CreateTokenRequest,
+    CustomerRecord,
+    P2pRequest,
+    P2pResponse,
     PaymentRequest,
     PaymentResponse,
+    PlanItem,
     RefundRequest,
     RefundResponse,
+    Subscription,
+    SubscriptionCreateRequest,
     TokenResponse,
     Transaction,
     VoidRequest,
@@ -224,6 +233,81 @@ class AsyncBepaidClient:
         )
         return ApmRefundResponse.model_validate(data["transaction"])
 
+    async def confirm_apm_payment(
+        self, uid: str, req: ApmConfirmRequest
+    ) -> ApmConfirmResponse:
+        data = await self._request(
+            "POST",
+            f"{self._base_api}/beyag/transactions/{uid}/confirm",
+            req.model_dump(by_alias=True, exclude_none=True),
+        )
+        return ApmConfirmResponse.model_validate(data["response"])
+
+    # ── P2P transfer ───────────────────────────────────────────────────────
+
+    async def create_p2p(self, req: P2pRequest) -> P2pResponse:
+        data = await self._request(
+            "POST",
+            f"{self._base_gateway}/transactions/p2ps",
+            {"request": req.model_dump(by_alias=True, exclude_none=True)},
+        )
+        return P2pResponse.model_validate(data["transaction"])
+
+    # ── subscriptions API ──────────────────────────────────────────────────
+
+    async def create_customer(self, req: CustomerRecord) -> CustomerRecord:
+        data = await self._request(
+            "POST",
+            f"{self._base_api}/customers",
+            req.model_dump(by_alias=True, exclude_none=True),
+        )
+        return CustomerRecord.model_validate(data)
+
+    async def get_customer(self, id: str) -> CustomerRecord:
+        data = await self._request("GET", f"{self._base_api}/customers/{id}")
+        return CustomerRecord.model_validate(data)
+
+    async def list_customers(self) -> list[CustomerRecord]:
+        data = await self._request("GET", f"{self._base_api}/customers")
+        return [CustomerRecord.model_validate(item) for item in data]
+
+    async def create_plan(self, req: PlanItem) -> PlanItem:
+        data = await self._request(
+            "POST",
+            f"{self._base_api}/plans",
+            req.model_dump(by_alias=True, exclude_none=True),
+        )
+        return PlanItem.model_validate(data)
+
+    async def get_plan(self, id: str) -> PlanItem:
+        data = await self._request("GET", f"{self._base_api}/plans/{id}")
+        return PlanItem.model_validate(data)
+
+    async def list_plans(self) -> list[PlanItem]:
+        data = await self._request("GET", f"{self._base_api}/plans")
+        return [PlanItem.model_validate(item) for item in data]
+
+    async def create_subscription(self, req: SubscriptionCreateRequest) -> Subscription:
+        data = await self._request(
+            "POST",
+            f"{self._base_api}/subscriptions",
+            req.model_dump(by_alias=True, exclude_none=True),
+        )
+        return Subscription.model_validate(data)
+
+    async def get_subscription(self, id: str) -> Subscription:
+        data = await self._request("GET", f"{self._base_api}/subscriptions/{id}")
+        return Subscription.model_validate(data)
+
+    async def cancel_subscription(
+        self, id: str, req: CancelSubscriptionRequest
+    ) -> dict[str, Any]:
+        return await self._request(
+            "POST",
+            f"{self._base_api}/subscriptions/{id}/cancel",
+            req.model_dump(by_alias=True, exclude_none=True),
+        )
+
 
 class BepaidClient:
     """Synchronous wrapper around :class:`AsyncBepaidClient`.
@@ -321,6 +405,47 @@ class BepaidClient:
         self, parent_uid: str, reason: str, amount: int | None = None
     ) -> ApmRefundResponse:
         return self._invoke("apm_full_refund", parent_uid, reason, amount)
+
+    def confirm_apm_payment(
+        self, uid: str, req: ApmConfirmRequest
+    ) -> ApmConfirmResponse:
+        return self._invoke("confirm_apm_payment", uid, req)
+
+    # ── P2P transfer ───────────────────────────────────────────────────────
+
+    def create_p2p(self, req: P2pRequest) -> P2pResponse:
+        return self._invoke("create_p2p", req)
+
+    # ── subscriptions API ──────────────────────────────────────────────────
+
+    def create_customer(self, req: CustomerRecord) -> CustomerRecord:
+        return self._invoke("create_customer", req)
+
+    def get_customer(self, id: str) -> CustomerRecord:
+        return self._invoke("get_customer", id)
+
+    def list_customers(self) -> list[CustomerRecord]:
+        return self._invoke("list_customers")
+
+    def create_plan(self, req: PlanItem) -> PlanItem:
+        return self._invoke("create_plan", req)
+
+    def get_plan(self, id: str) -> PlanItem:
+        return self._invoke("get_plan", id)
+
+    def list_plans(self) -> list[PlanItem]:
+        return self._invoke("list_plans")
+
+    def create_subscription(self, req: SubscriptionCreateRequest) -> Subscription:
+        return self._invoke("create_subscription", req)
+
+    def get_subscription(self, id: str) -> Subscription:
+        return self._invoke("get_subscription", id)
+
+    def cancel_subscription(
+        self, id: str, req: CancelSubscriptionRequest
+    ) -> dict[str, Any]:
+        return self._invoke("cancel_subscription", id, req)
 
 
 # ── webhook helpers ──────────────────────────────────────────────────────────

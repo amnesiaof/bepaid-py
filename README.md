@@ -129,13 +129,14 @@ notification = WebhookNotification.model_validate_json(raw_body)
 
 ## API coverage
 
-| Group     | Operations |
-|-----------|------------|
-| Gateway   | `create_payment`, `create_authorization`, `capture`, `void`, `refund`, `get_transaction` |
-| Tokens    | `create_token` |
-| Checkout  | `create_checkout`, `get_checkout_status`, `validate_apple_pay` |
-| Direct    | `create_apm_payment`, `apm_refund`, `apm_full_refund` |
-| Webhooks  | verification + payload parsing |
+| Group         | Operations |
+|---------------|------------|
+| Gateway       | `create_payment`, `create_authorization`, `capture`, `void`, `refund`, `get_transaction`, `create_p2p` |
+| Tokens        | `create_token` |
+| Checkout      | `create_checkout`, `get_checkout_status`, `validate_apple_pay` |
+| Direct        | `create_apm_payment`, `apm_refund`, `apm_full_refund`, `confirm_apm_payment` |
+| Subscriptions | `create_customer`, `get_customer`, `list_customers`, `create_plan`, `get_plan`, `list_plans`, `create_subscription`, `get_subscription`, `cancel_subscription` |
+| Webhooks      | verification + payload parsing (transaction & subscription) |
 
 ## License
 

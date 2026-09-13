@@ -13,7 +13,9 @@ from bepaid.models import (
     AuthorizationRequest,
     CheckoutOrder,
     CheckoutRequest,
+    P2pRequest,
     PaymentRequest,
+    SubscriptionCreateRequest,
 )
 
 
@@ -129,3 +131,58 @@ async def test_async_checkout_and_apm() -> None:
 @pytest.mark.asyncio
 async def test_async_errors_baseclass() -> None:
     assert issubclass(ApiError, BepaidError)
+
+
+@pytest.mark.asyncio
+async def test_async_subscriptions_and_p2p() -> None:
+    c = async_client(
+        {
+            ("POST", "/subscriptions"): {
+                "json": {
+                    "id": "sbs_cce60e7f2d661bc0",
+                    "state": "active",
+                    "card": {"brand": "master", "last_4": "5003", "token": "tok_1"},
+                    "plan": {"id": "pln_1", "title": "Basic plan"},
+                }
+            },
+            ("POST", "/transactions/p2ps"): {
+                "json": {
+                    "transaction": {
+                        "uid": "p2p1",
+                        "status": "successful",
+                        "type": "p2p",
+                        "amount": 100,
+                        "currency": "EUR",
+                    }
+                }
+            },
+        }
+    )
+    try:
+        s = await c.create_subscription(
+            SubscriptionCreateRequest(
+                card={"token": "tok_1"},
+                plan={"id": "pln_1"},
+                tracking_id="async_track",
+            )
+        )
+        assert s.state == "active"
+        p = await c.create_p2p(
+            P2pRequest(
+                amount=100,
+                currency="EUR",
+                credit_card={
+                    "number": "4012001037141112",
+                    "holder": "John Doe",
+                    "verification_value": "123",
+                    "exp_month": "12",
+                    "exp_year": "2028",
+                },
+                recipient_card={"number": "4200000000000000"},
+                test=True,
+            )
+        )
+        assert p.status == "successful"
+        assert p.type == "p2p"
+    finally:
+        await c.aclose()

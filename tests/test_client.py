@@ -11,15 +11,21 @@ from bepaid import AsyncBepaidClient, BepaidClient, BepaidError
 from bepaid.client import verify_webhook_auth
 from bepaid.errors import ApiError
 from bepaid.models import (
+    ApmConfirmRequest,
     ApmPaymentRequest,
     ApmRefundRequest,
     AuthorizationRequest,
+    CancelSubscriptionRequest,
     CaptureRequest,
     CheckoutOrder,
     CheckoutRequest,
     CreateTokenRequest,
+    CustomerRecord,
+    P2pRequest,
     PaymentRequest,
+    PlanItem,
     RefundRequest,
+    SubscriptionCreateRequest,
     VoidRequest,
 )
 
@@ -323,3 +329,175 @@ def test_verify_webhook_auth(header: str, expected: bool) -> None:
 
 def test_errors_baseclass() -> None:
     assert issubclass(ApiError, BepaidError)
+
+
+def test_apm_confirm() -> None:
+    c = client(
+        {
+            ("POST", "/beyag/transactions/1-310b0da80b/confirm"): {
+                "json": {
+                    "response": {
+                        "parent_uid": "1-310b0da80b",
+                        "type": "confirm",
+                        "status": "successful",
+                        "message": "Confirm was successfully processed",
+                        "amount": 332400,
+                        "currency": "USD",
+                    }
+                }
+            }
+        }
+    )
+    resp = c.confirm_apm_payment(
+        "1-310b0da80b",
+        ApmConfirmRequest(
+            skip_duplicate_check=False, transaction_reference="receipt-123"
+        ),
+    )
+    assert resp.status == "successful"
+    assert resp.type == "confirm"
+
+
+def test_p2p() -> None:
+    c = client(
+        {
+            ("POST", "/transactions/p2ps"): {
+                "json": {
+                    "transaction": {
+                        "uid": "1-82cc07d15d",
+                        "status": "successful",
+                        "type": "p2p",
+                        "amount": 100,
+                        "currency": "EUR",
+                        "credit_card": {"brand": "visa", "last_4": "1112"},
+                        "recipient_card": {"brand": "visa", "last_4": "0000"},
+                    }
+                }
+            }
+        }
+    )
+    resp = c.create_p2p(
+        P2pRequest(
+            amount=100,
+            currency="EUR",
+            credit_card={
+                "number": "4012001037141112",
+                "holder": "John Doe",
+                "verification_value": "123",
+                "exp_month": "12",
+                "exp_year": "2028",
+            },
+            recipient_card={"number": "4200000000000000"},
+            test=True,
+        )
+    )
+    assert resp.status == "successful"
+    assert resp.type == "p2p"
+    assert resp.credit_card is not None
+    assert resp.credit_card.brand == "visa"
+
+
+def test_customer_create_get_list() -> None:
+    c = client(
+        {
+            ("POST", "/customers"): {
+                "json": {
+                    "id": "cst_7aee5afb954c7ef7",
+                    "first_name": "John",
+                    "last_name": "Doe",
+                    "email": "customer@example.com",
+                }
+            },
+            ("GET", "/customers/cst_7aee5afb954c7ef7"): {
+                "json": {"id": "cst_7aee5afb954c7ef7", "email": "customer@example.com"}
+            },
+            ("GET", "/customers"): {
+                "json": [
+                    {"id": "cst_7aee5afb954c7ef7", "email": "customer@example.com"}
+                ]
+            },
+        }
+    )
+    created = c.create_customer(
+        CustomerRecord(
+            first_name="John",
+            last_name="Doe",
+            email="customer@example.com",
+            ip="127.0.0.1",
+        )
+    )
+    assert created.id == "cst_7aee5afb954c7ef7"
+    fetched = c.get_customer("cst_7aee5afb954c7ef7")
+    assert fetched.email == "customer@example.com"
+    listed = c.list_customers()
+    assert len(listed) == 1
+    assert listed[0].email == "customer@example.com"
+
+
+def test_plan_create_list() -> None:
+    c = client(
+        {
+            ("POST", "/plans"): {
+                "json": {
+                    "id": "pln_2b0c211f50deb72c",
+                    "title": "Basic plan",
+                    "currency": "USD",
+                    "plan": {"amount": 20, "interval": 7, "interval_unit": "day"},
+                    "number_payment_attempts": 3,
+                    "test": True,
+                }
+            },
+            ("GET", "/plans"): {
+                "json": [{"id": "pln_2b0c211f50deb72c", "title": "Basic plan"}]
+            },
+        }
+    )
+    p = c.create_plan(
+        PlanItem(
+            test=True,
+            title="Basic plan",
+            currency="USD",
+            plan={"amount": 20, "interval": 7, "interval_unit": "day"},
+            number_payment_attempts=3,
+        )
+    )
+    assert p.id == "pln_2b0c211f50deb72c"
+    plans = c.list_plans()
+    assert len(plans) == 1
+    assert plans[0].title == "Basic plan"
+
+
+def test_subscription_create_and_cancel() -> None:
+    c = client(
+        {
+            ("POST", "/subscriptions"): {
+                "json": {
+                    "id": "sbs_cce60e7f2d661bc0",
+                    "state": "active",
+                    "tracking_id": "my_tracking_id",
+                    "card": {"brand": "master", "last_4": "5003", "token": "tok_1"},
+                    "customer": {"id": "cst_ec240ca02bac424b"},
+                    "plan": {"id": "pln_f5ee5ebd04e39daa", "title": "Basic plan"},
+                }
+            },
+            ("POST", "/subscriptions/sbs_cce60e7f2d661bc0/cancel"): {
+                "json": {"state": "canceled"}
+            },
+        }
+    )
+    s = c.create_subscription(
+        SubscriptionCreateRequest(
+            card={"token": "tok_1"},
+            customer={"id": "cst_ec240ca02bac424b"},
+            plan={"id": "pln_f5ee5ebd04e39daa"},
+            tracking_id="my_tracking_id",
+        )
+    )
+    assert s.state == "active"
+    assert s.card is not None
+    assert s.card.brand == "master"
+    r = c.cancel_subscription(
+        "sbs_cce60e7f2d661bc0",
+        CancelSubscriptionRequest(cancel_reason="Customer's request"),
+    )
+    assert r["state"] == "canceled"

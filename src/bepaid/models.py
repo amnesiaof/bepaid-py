@@ -346,6 +346,180 @@ class ApmRefundResponse(CamelModel):
     refund: dict[str, Any] | None = None
 
 
+class ApmConfirmRequest(CamelModel):
+    skip_duplicate_check: bool | None = None
+    transaction_reference: str
+
+
+class ApmConfirmResponse(CamelModel):
+    parent_uid: str | None = None
+    type: str | None = None
+    status: str | None = None
+    message: str | None = None
+    created_at: str | None = None
+    amount: int | None = None
+    currency: str | None = None
+
+
+# ── P2P transfer ──────────────────────────────────────────────────────────────
+
+
+class P2pCard(CamelModel):
+    number: str | None = None
+    holder: str | None = None
+    verification_value: str | None = None
+    exp_month: str | None = None
+    exp_year: str | None = None
+    token: str | None = None
+
+
+class P2pInfo(CamelModel):
+    type: str | None = Field(default=None, alias="type")
+
+
+class P2pAdditionalData(CamelModel):
+    p2p: P2pInfo | None = None
+
+
+class P2pRequest(CamelModel):
+    amount: int
+    currency: str
+    credit_card: P2pCard
+    recipient_card: P2pCard
+    test: bool | None = None
+    tracking_id: str | None = None
+    additional_data: P2pAdditionalData | None = None
+
+
+class P2pResponse(CamelModel):
+    uid: str | None = None
+    status: str | None = None
+    amount: int | None = None
+    currency: str | None = None
+    description: str | None = None
+    type: str | None = None
+    tracking_id: str | None = None
+    test: bool | None = None
+    created_at: str | None = None
+    redirect_url: str | None = None
+    credit_card: CreditCardInfo | None = None
+    recipient_card: CreditCardInfo | None = None
+    receipt_url: str | None = None
+    verify_p2p: dict[str, Any] | None = None
+    p2p: dict[str, Any] | None = None
+    sender_billing_address: BillingAddress | None = None
+    recipient_billing_address: BillingAddress | None = None
+
+
+# ── subscriptions API (api.bepaid.by) ────────────────────────────────────────
+
+
+class CustomerRecord(CamelModel):
+    id: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    address: str | None = None
+    city: str | None = None
+    country: str | None = None
+    zip: str | None = None
+    state: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    ip: str | None = None
+    external_id: str | None = None
+
+
+class PlanInterval(CamelModel):
+    amount: int | None = None
+    interval: int | None = None
+    interval_unit: str | None = None
+    visible_fields: list[str] | None = None
+
+
+class PlanTrial(CamelModel):
+    amount: int | None = None
+    interval: int | None = None
+    interval_unit: str | None = None
+    as_first_payment: bool | None = None
+
+
+class PlanItem(CamelModel):
+    id: str | None = None
+    test: bool | None = None
+    title: str | None = None
+    currency: str | None = None
+    language: str | None = None
+    plan: PlanInterval | None = None
+    trial: PlanTrial | None = None
+    infinite: bool | None = None
+    billing_cycles: int | None = None
+    number_payment_attempts: int | None = None
+    prevent_payments_at_night: bool | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+    pay_url: str | None = None
+
+
+class SubscriptionCard(CamelModel):
+    token: str | None = None
+    number: str | None = None
+    holder: str | None = None
+    verification_value: str | None = None
+    exp_month: str | None = None
+    exp_year: str | None = None
+
+
+class SubscriptionCustomer(CamelModel):
+    id: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    email: str | None = None
+
+
+class SubscriptionPlan(CamelModel):
+    id: str | None = None
+    title: str | None = None
+    currency: str | None = None
+    plan: PlanInterval | None = None
+    trial: PlanTrial | None = None
+
+
+class SubscriptionCreateRequest(CamelModel):
+    card: SubscriptionCard | None = None
+    customer: SubscriptionCustomer | None = None
+    plan: SubscriptionPlan
+    tracking_id: str | None = None
+    device_id: str | None = None
+    return_url: str | None = None
+    notification_url: str | None = None
+    dynamic_billing_descriptor: str | None = None
+    additional_data: dict[str, Any] | None = None
+    settings: dict[str, Any] | None = None
+
+
+class Subscription(CamelModel):
+    id: str | None = None
+    state: str | None = None
+    tracking_id: str | None = None
+    device_id: str | None = None
+    created_at: str | None = None
+    renew_at: str | None = None
+    active_to: str | None = None
+    card: CreditCardInfo | None = None
+    customer: SubscriptionCustomer | None = None
+    plan: dict[str, Any] | None = None
+    last_transaction: dict[str, Any] | None = None
+    paid_billing_cycles: int | None = None
+    number_failed_payment_attempts: int | None = None
+    additional_data: dict[str, Any] | None = None
+    redirect_url: str | None = None
+    event: str | None = None
+
+
+class CancelSubscriptionRequest(CamelModel):
+    cancel_reason: str
+
+
 # ── webhook ───────────────────────────────────────────────────────────────────
 
 
