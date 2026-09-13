@@ -237,7 +237,7 @@ class TokenResponse(CamelModel):
 # ── checkout API ──────────────────────────────────────────────────────────────
 
 
-class CheckoutSettings(CamelModel):
+class CheckoutSettings(BaseModel):
     return_url: str | None = None
     success_url: str | None = None
     decline_url: str | None = None
@@ -249,22 +249,27 @@ class CheckoutSettings(CamelModel):
     language: str | None = None
 
 
-class PaymentMethod(CamelModel):
+class PaymentMethod(BaseModel):
     types: list[str] | None = None
 
 
-class CheckoutCreditCard(CamelModel):
+class CheckoutCreditCard(BaseModel):
     token: str | None = None
 
 
-class CheckoutOrder(CamelModel):
+class CheckoutOrderAdditionalData(BaseModel):
+    contract: list[str] | None = None
+
+
+class CheckoutOrder(BaseModel):
     currency: str
     amount: int
     description: str | None = None
     tracking_id: str | None = None
+    additional_data: CheckoutOrderAdditionalData | None = None
 
 
-class CheckoutRequest(CamelModel):
+class CheckoutRequest(BaseModel):
     test: bool | None = None
     transaction_type: str = "payment"
     attempts: int | None = None

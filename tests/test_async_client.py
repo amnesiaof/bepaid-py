@@ -13,6 +13,7 @@ from bepaid.models import (
     AuthorizationRequest,
     BalanceRequest,
     CheckoutOrder,
+    CheckoutOrderAdditionalData,
     CheckoutRequest,
     P2pRequest,
     PaymentRequest,
@@ -133,6 +134,37 @@ async def test_async_checkout_and_apm() -> None:
         assert p.status == "pending"
         r = await c.apm_refund(ApmRefundRequest(parent_uid="apm1", reason="reason"))
         assert r.status == "successful"
+    finally:
+        await c.aclose()
+
+
+@pytest.mark.asyncio
+async def test_async_payment_token() -> None:
+    c = async_client(
+        {
+            ("POST", "/payments/tokens"): {
+                "json": {
+                    "checkout": {
+                        "token": "3241e439f8c87d941d92621a4bdc030d",
+                        "redirect_url": "https://checkout.bepaid.by/v2/checkout?token=3241e439",
+                    }
+                }
+            }
+        }
+    )
+    try:
+        p = await c.create_payment_token(
+            CheckoutRequest(
+                test=True,
+                order=CheckoutOrder(
+                    currency="USD",
+                    amount=7000,
+                    description="Widget order",
+                    additional_data=CheckoutOrderAdditionalData(contract=["recurring"]),
+                ),
+            )
+        )
+        assert p.token == "3241e439f8c87d941d92621a4bdc030d"
     finally:
         await c.aclose()
 

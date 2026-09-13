@@ -215,6 +215,14 @@ class AsyncBepaidClient:
         )
         return CheckoutResponse.model_validate(data["checkout"])
 
+    async def create_payment_token(self, req: CheckoutRequest) -> CheckoutResponse:
+        data = await self._request(
+            "POST",
+            f"{self._base_api}/payments/tokens",
+            {"checkout": req.model_dump(by_alias=True, exclude_none=True)},
+        )
+        return CheckoutResponse.model_validate(data["checkout"])
+
     async def get_checkout_status(self, token: str) -> CheckoutStatus:
         data = await self._request(
             "GET", f"{self._base_checkout}/ctp/api/checkouts/{token}"
@@ -505,6 +513,9 @@ class BepaidClient:
 
     def create_checkout(self, req: CheckoutRequest) -> CheckoutResponse:
         return self._invoke("create_checkout", req)
+
+    def create_payment_token(self, req: CheckoutRequest) -> CheckoutResponse:
+        return self._invoke("create_payment_token", req)
 
     def get_checkout_status(self, token: str) -> CheckoutStatus:
         return self._invoke("get_checkout_status", token)

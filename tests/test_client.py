@@ -19,6 +19,7 @@ from bepaid.models import (
     CancelSubscriptionRequest,
     CaptureRequest,
     CheckoutOrder,
+    CheckoutOrderAdditionalData,
     CheckoutRequest,
     CreateTokenRequest,
     CustomerRecord,
@@ -294,6 +295,34 @@ def test_checkout_create_and_status() -> None:
     assert co.token == "tok1"
     st = c.get_checkout_status("tok1")
     assert st.shop_id == 160
+
+
+def test_payment_token_happy_path() -> None:
+    c = client(
+        {
+            ("POST", "/payments/tokens"): {
+                "json": {
+                    "checkout": {
+                        "token": "3241e439f8c87d941d92621a4bdc030d",
+                        "redirect_url": "https://checkout.bepaid.by/v2/checkout?token=3241e439f8c87d941d92621a4bdc030d",
+                    }
+                }
+            }
+        }
+    )
+    p = c.create_payment_token(
+        CheckoutRequest(
+            test=True,
+            order=CheckoutOrder(
+                currency="USD",
+                amount=7000,
+                description="Widget order",
+                additional_data=CheckoutOrderAdditionalData(contract=["recurring"]),
+            ),
+        )
+    )
+    assert p.token == "3241e439f8c87d941d92621a4bdc030d"
+    assert p.redirect_url and "checkout.bepaid.by/v2/checkout" in p.redirect_url
 
 
 def test_apm_payment_and_refund() -> None:
