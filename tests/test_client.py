@@ -28,11 +28,13 @@ from bepaid.models import (
     P2pRequest,
     PaymentRequest,
     PayoutAddress,
+    PayoutCreditCard,
     PayoutCustomer,
     PayoutRequest,
     PlanItem,
     ProductCreateRequest,
     ProductUpdateRequest,
+    RecipientTokenizationRequest,
     RefundRequest,
     ReportCountParams,
     ReportCountRequest,
@@ -254,6 +256,45 @@ def test_charge_saved_card() -> None:
     )
     assert resp.uid == "1-310b0da80b"
     assert resp.status == "successful"
+
+
+def test_recipient_tokenization() -> None:
+    c = client(
+        {
+            ("POST", "/transactions/recipient_tokenizations"): {
+                "expect_version": "3",
+                "json": {
+                    "transaction": {
+                        "uid": "1-310b0da80b",
+                        "status": "pending",
+                        "recipient_credit_card": {"token": "tok_recipient"},
+                    }
+                },
+            }
+        }
+    )
+    resp = c.tokenize_recipient_card(
+        RecipientTokenizationRequest(
+            description="Tokenize card",
+            recipient_credit_card=PayoutCreditCard(
+                number="4242424242424242", holder="John Smith"
+            ),
+        )
+    )
+    assert resp["transaction"]["uid"] == "1-310b0da80b"
+    assert resp["transaction"]["status"] == "pending"
+
+
+def test_apple_pay_payment() -> None:
+    c = client(
+        {
+            ("POST", "/apple_pay/payment"): {
+                "json": {"Success": True, "Model": None},
+            }
+        }
+    )
+    resp = c.apple_pay_payment("eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9...")
+    assert resp["Success"] is True
 
 
 def test_get_transaction() -> None:

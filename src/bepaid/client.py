@@ -51,6 +51,7 @@ from .models import (
     Product,
     ProductCreateRequest,
     ProductUpdateRequest,
+    RecipientTokenizationRequest,
     RefundRequest,
     RefundResponse,
     ReportCountRequest,
@@ -209,6 +210,25 @@ class AsyncBepaidClient:
             api_version="3",
         )
         return Transaction.model_validate(data["transaction"])
+
+    # ── recipient tokenization ─────────────────────────────────────────────
+
+    async def tokenize_recipient_card(
+        self, req: RecipientTokenizationRequest
+    ) -> dict[str, Any]:
+        return await self._request(
+            "POST",
+            f"{self._base_gateway}/transactions/recipient_tokenizations",
+            {"request": req.model_dump(by_alias=True, exclude_none=True)},
+            api_version="3",
+        )
+
+    # ── Apple Pay ──────────────────────────────────────────────────────────
+
+    async def apple_pay_payment(self, token: str) -> dict[str, Any]:
+        return await self._request(
+            "POST", f"{self._base_checkout}/apple_pay/payment", {"request": token}
+        )
 
     # ── token API ──────────────────────────────────────────────────────────
 
@@ -526,6 +546,18 @@ class BepaidClient:
 
     def charge_saved_card(self, req: ChargeRequest) -> Transaction:
         return self._invoke("charge_saved_card", req)
+
+    # ── recipient tokenization ─────────────────────────────────────────────
+
+    def tokenize_recipient_card(
+        self, req: RecipientTokenizationRequest
+    ) -> dict[str, Any]:
+        return self._invoke("tokenize_recipient_card", req)
+
+    # ── Apple Pay ──────────────────────────────────────────────────────────
+
+    def apple_pay_payment(self, token: str) -> dict[str, Any]:
+        return self._invoke("apple_pay_payment", token)
 
     # ── token API ──────────────────────────────────────────────────────────
 

@@ -19,9 +19,11 @@ from bepaid.models import (
     CheckoutRequest,
     P2pRequest,
     PaymentRequest,
+    PayoutCreditCard,
     PayoutRequest,
     ProductCreateRequest,
     ProductUpdateRequest,
+    RecipientTokenizationRequest,
     ReportCountParams,
     ReportCountRequest,
     SplitAdditionalData,
@@ -201,6 +203,39 @@ async def test_async_charge_saved_card() -> None:
         )
         assert resp.uid == "1-310b0da80b"
         assert resp.status == "successful"
+    finally:
+        await c.aclose()
+
+
+@pytest.mark.asyncio
+async def test_async_recipient_tokenization_and_apple_pay() -> None:
+    c = async_client(
+        {
+            ("POST", "/transactions/recipient_tokenizations"): {
+                "expect_version": "3",
+                "json": {
+                    "transaction": {
+                        "uid": "1-310b0da80b",
+                        "status": "pending",
+                        "recipient_credit_card": {"token": "tok_recipient"},
+                    }
+                },
+            },
+            ("POST", "/apple_pay/payment"): {"json": {"Success": True, "Model": None}},
+        }
+    )
+    try:
+        tokenized = await c.tokenize_recipient_card(
+            RecipientTokenizationRequest(
+                description="Tokenize card",
+                recipient_credit_card=PayoutCreditCard(
+                    number="4242424242424242", holder="John Smith"
+                ),
+            )
+        )
+        assert tokenized["transaction"]["uid"] == "1-310b0da80b"
+        apple = await c.apple_pay_payment("eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9...")
+        assert apple["Success"] is True
     finally:
         await c.aclose()
 

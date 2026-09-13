@@ -577,6 +577,8 @@ class PayoutCustomer(BaseModel):
     ip: str | None = None
     email: str | None = None
     birth_date: str | None = None
+    device_id: str | None = None
+    external_id: str | None = None
 
 
 class PayoutAddress(BaseModel):
@@ -846,6 +848,22 @@ class ChargeRequest(BaseModel):
     credit_card: ChargeCreditCard
     customer: Customer | None = None
     additional_data: ChargeAdditionalData | None = None
+
+
+# ── gateway: recipient tokenization ──────────────────────────────────────────
+
+
+class RecipientTokenizationAdditionalData(BaseModel):
+    referer: str | None = None
+
+
+class RecipientTokenizationRequest(BaseModel):
+    description: str | None = None
+    tracking_id: str | None = None
+    recipient_billing_address: PayoutAddress | None = None
+    recipient_credit_card: PayoutCreditCard
+    recipient: PayoutCustomer | None = None
+    additional_data: RecipientTokenizationAdditionalData | None = None
 
 
 WebhookNotification.model_rebuild()
