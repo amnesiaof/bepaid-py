@@ -140,11 +140,12 @@ Ready-to-run scripts under [`examples/`](examples/):
 
 | Group         | Operations |
 |---------------|------------|
-| Gateway       | `create_payment`, `create_authorization`, `capture`, `void`, `refund`, `get_transaction`, `create_p2p` |
+| Gateway       | `create_payment`, `create_authorization`, `capture`, `void`, `refund`, `get_transaction`, `create_p2p`, `create_payout` |
 | Tokens        | `create_token` |
 | Checkout      | `create_checkout`, `get_checkout_status`, `validate_apple_pay` |
-| Direct        | `create_apm_payment`, `apm_refund`, `apm_full_refund`, `confirm_apm_payment` |
+| Direct        | `create_apm_payment`, `apm_refund`, `apm_full_refund`, `confirm_apm_payment`, `get_balance` |
 | Subscriptions | `create_customer`, `get_customer`, `list_customers`, `create_plan`, `get_plan`, `list_plans`, `create_subscription`, `get_subscription`, `cancel_subscription` |
+| Merchant      | `get_reports`, `get_report_count`, `get_channel_balances` |
 | Webhooks      | verification + payload parsing (transaction & subscription) |
 
 ## License
