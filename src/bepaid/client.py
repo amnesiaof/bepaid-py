@@ -26,9 +26,12 @@ from .models import (
     ApmRefundResponse,
     AuthorizationRequest,
     AuthorizationResponse,
+    BalanceRequest,
+    BalanceResponse,
     CancelSubscriptionRequest,
     CaptureRequest,
     CaptureResponse,
+    ChannelBalance,
     CheckoutRequest,
     CheckoutResponse,
     CheckoutStatus,
@@ -38,9 +41,15 @@ from .models import (
     P2pResponse,
     PaymentRequest,
     PaymentResponse,
+    PayoutRequest,
+    PayoutResponse,
     PlanItem,
     RefundRequest,
     RefundResponse,
+    ReportCountRequest,
+    ReportCountResponse,
+    ReportListRequest,
+    ReportListResponse,
     Subscription,
     SubscriptionCreateRequest,
     TokenResponse,
@@ -54,6 +63,7 @@ T = TypeVar("T")
 DEFAULT_GATEWAY_URL = "https://gateway.bepaid.by"
 DEFAULT_CHECKOUT_URL = "https://checkout.bepaid.by"
 DEFAULT_API_URL = "https://api.bepaid.by"
+DEFAULT_MERCHANT_URL = "https://merchant.bepaid.by"
 
 _HEADERS = {"Content-Type": "application/json", "Accept": "application/json"}
 
@@ -72,6 +82,7 @@ class AsyncBepaidClient:
         base_gateway_url: str = DEFAULT_GATEWAY_URL,
         base_checkout_url: str = DEFAULT_CHECKOUT_URL,
         base_api_url: str = DEFAULT_API_URL,
+        base_merchant_url: str = DEFAULT_MERCHANT_URL,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         credentials = f"{shop_id}:{secret_key}"
@@ -79,6 +90,7 @@ class AsyncBepaidClient:
         self._base_gateway = base_gateway_url
         self._base_checkout = base_checkout_url
         self._base_api = base_api_url
+        self._base_merchant = base_merchant_url
         self._http = httpx.AsyncClient(
             transport=transport,
             timeout=timeout,
@@ -102,12 +114,19 @@ class AsyncBepaidClient:
     # ── transport ──────────────────────────────────────────────────────────
 
     async def _request(
-        self, method: str, url: str, body: BaseModel | dict | None = None
+        self,
+        method: str,
+        url: str,
+        body: BaseModel | dict | None = None,
+        api_version: str | None = None,
     ) -> dict[str, Any]:
+        headers = {"Authorization": self._auth}
+        if api_version is not None:
+            headers["X-Api-Version"] = api_version
         resp = await self._http.request(
             method,
             url,
-            headers={"Authorization": self._auth},
+            headers=headers,
             json=body.model_dump(by_alias=True, exclude_none=True)
             if isinstance(body, BaseModel)
             else body,
@@ -308,6 +327,56 @@ class AsyncBepaidClient:
             req.model_dump(by_alias=True, exclude_none=True),
         )
 
+    # ── payout ─────────────────────────────────────────────────────────────
+
+    async def create_payout(self, req: PayoutRequest) -> PayoutResponse:
+        data = await self._request(
+            "POST",
+            f"{self._base_gateway}/transactions/payouts",
+            {"request": req.model_dump(by_alias=True, exclude_none=True)},
+        )
+        return PayoutResponse.model_validate(data["transaction"])
+
+    # ── APM balance query ───────────────────────────────────────────────────
+
+    async def get_balance(self, req: BalanceRequest) -> BalanceResponse:
+        data = await self._request(
+            "POST",
+            f"{self._base_api}/beyag/balance",
+            req.model_dump(by_alias=True, exclude_none=True),
+        )
+        return BalanceResponse.model_validate(data)
+
+    # ── merchant reports ────────────────────────────────────────────────────
+
+    async def get_reports(self, req: ReportListRequest) -> ReportListResponse:
+        data = await self._request(
+            "POST",
+            f"{self._base_merchant}/api/reports",
+            req.model_dump(by_alias=True, exclude_none=True),
+            api_version="2",
+        )
+        return ReportListResponse.model_validate(data)
+
+    async def get_report_count(self, req: ReportCountRequest) -> ReportCountResponse:
+        data = await self._request(
+            "POST",
+            f"{self._base_merchant}/api/reports/count",
+            req.model_dump(by_alias=True, exclude_none=True),
+            api_version="3",
+        )
+        return ReportCountResponse.model_validate(data)
+
+    async def get_channel_balances(
+        self, gateway_id: int, currency: str | None = None
+    ) -> list[ChannelBalance]:
+        suffix = f"&currency={currency}" if currency else ""
+        data = await self._request(
+            "GET",
+            f"{self._base_merchant}/shop/channel_balances/?gateway_id={gateway_id}{suffix}",
+        )
+        return [ChannelBalance.model_validate(item) for item in data]
+
 
 class BepaidClient:
     """Synchronous wrapper around :class:`AsyncBepaidClient`.
@@ -326,6 +395,7 @@ class BepaidClient:
         base_gateway_url: str = DEFAULT_GATEWAY_URL,
         base_checkout_url: str = DEFAULT_CHECKOUT_URL,
         base_api_url: str = DEFAULT_API_URL,
+        base_merchant_url: str = DEFAULT_MERCHANT_URL,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._shop_id = shop_id
@@ -334,6 +404,7 @@ class BepaidClient:
         self._base_gateway = base_gateway_url
         self._base_checkout = base_checkout_url
         self._base_api = base_api_url
+        self._base_merchant = base_merchant_url
         self._transport = transport
 
     def _run(self, coro: Coroutine[Any, Any, T]) -> T:
@@ -347,6 +418,7 @@ class BepaidClient:
             base_gateway_url=self._base_gateway,
             base_checkout_url=self._base_checkout,
             base_api_url=self._base_api,
+            base_merchant_url=self._base_merchant,
             transport=self._transport,
         )
 
@@ -446,6 +518,29 @@ class BepaidClient:
         self, id: str, req: CancelSubscriptionRequest
     ) -> dict[str, Any]:
         return self._invoke("cancel_subscription", id, req)
+
+    # ── payout ─────────────────────────────────────────────────────────────
+
+    def create_payout(self, req: PayoutRequest) -> PayoutResponse:
+        return self._invoke("create_payout", req)
+
+    # ── APM balance query ───────────────────────────────────────────────────
+
+    def get_balance(self, req: BalanceRequest) -> BalanceResponse:
+        return self._invoke("get_balance", req)
+
+    # ── merchant reports ────────────────────────────────────────────────────
+
+    def get_reports(self, req: ReportListRequest) -> ReportListResponse:
+        return self._invoke("get_reports", req)
+
+    def get_report_count(self, req: ReportCountRequest) -> ReportCountResponse:
+        return self._invoke("get_report_count", req)
+
+    def get_channel_balances(
+        self, gateway_id: int, currency: str | None = None
+    ) -> list[ChannelBalance]:
+        return self._invoke("get_channel_balances", gateway_id, currency)
 
 
 # ── webhook helpers ──────────────────────────────────────────────────────────

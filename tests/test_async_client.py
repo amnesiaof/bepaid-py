@@ -11,10 +11,14 @@ from bepaid.models import (
     ApmPaymentRequest,
     ApmRefundRequest,
     AuthorizationRequest,
+    BalanceRequest,
     CheckoutOrder,
     CheckoutRequest,
     P2pRequest,
     PaymentRequest,
+    PayoutRequest,
+    ReportCountParams,
+    ReportCountRequest,
     SubscriptionCreateRequest,
 )
 
@@ -184,5 +188,78 @@ async def test_async_subscriptions_and_p2p() -> None:
         )
         assert p.status == "successful"
         assert p.type == "p2p"
+    finally:
+        await c.aclose()
+
+
+@pytest.mark.asyncio
+async def test_async_payout_and_balance() -> None:
+    c = async_client(
+        {
+            ("POST", "/transactions/payouts"): {
+                "json": {
+                    "transaction": {
+                        "uid": "1",
+                        "type": "payout",
+                        "status": "successful",
+                        "amount": 100,
+                        "currency": "USD",
+                    }
+                }
+            },
+            ("POST", "/beyag/balance"): {
+                "json": {
+                    "status": "Successful",
+                    "code": "S.0000",
+                    "gateway_id": 1234,
+                    "amount": 1290092162,
+                    "currency": "USD",
+                }
+            },
+        }
+    )
+    try:
+        p = await c.create_payout(
+            PayoutRequest(
+                amount=100,
+                currency="USD",
+                recipient={"ip": "127.0.0.1", "email": "john@example.com"},
+                sender={"ip": "127.0.0.1", "email": "john@example.com"},
+                recipient_billing_address={"country": "US", "city": "Denver"},
+                sender_billing_address={"country": "US", "city": "Denver"},
+            )
+        )
+        assert p.status == "successful"
+        assert p.type == "payout"
+        b = await c.get_balance(BalanceRequest(gateway_id=1234, currency="USD"))
+        assert b.amount == 1290092162
+    finally:
+        await c.aclose()
+
+
+@pytest.mark.asyncio
+async def test_async_report_count() -> None:
+    c = async_client(
+        {
+            ("POST", "/api/reports/count"): {
+                "expect_version": "3",
+                "json": {"transactions": {"count": 2}},
+            }
+        }
+    )
+    try:
+        r = await c.get_report_count(
+            ReportCountRequest(
+                report_params=ReportCountParams(
+                    date_type="created_at",
+                    from_="2022-01-25 00:00:00",
+                    to="2022-01-27 23:59:59",
+                    status="incomplete",
+                    payment_method_type="credit_card",
+                    time_zone="Etc/UTC",
+                )
+            )
+        )
+        assert r.transactions.count == 2
     finally:
         await c.aclose()

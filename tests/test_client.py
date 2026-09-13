@@ -15,6 +15,7 @@ from bepaid.models import (
     ApmPaymentRequest,
     ApmRefundRequest,
     AuthorizationRequest,
+    BalanceRequest,
     CancelSubscriptionRequest,
     CaptureRequest,
     CheckoutOrder,
@@ -23,8 +24,15 @@ from bepaid.models import (
     CustomerRecord,
     P2pRequest,
     PaymentRequest,
+    PayoutAddress,
+    PayoutCustomer,
+    PayoutRequest,
     PlanItem,
     RefundRequest,
+    ReportCountParams,
+    ReportCountRequest,
+    ReportListRequest,
+    ReportParams,
     SubscriptionCreateRequest,
     VoidRequest,
 )
@@ -45,6 +53,10 @@ class MockTransport(httpx.MockTransport):
             raise AssertionError(f"Unmocked request: {key}")
         spec = self.handlers[key]
         assert request.headers.get("authorization") == AUTH, "bad auth"
+        if "expect_version" in spec:
+            assert request.headers.get("x-api-version") == spec["expect_version"], (
+                "bad api version"
+            )
         if "expect_body" in spec:
             assert json.loads(request.content) == spec["expect_body"]
         return httpx.Response(
@@ -501,3 +513,162 @@ def test_subscription_create_and_cancel() -> None:
         CancelSubscriptionRequest(cancel_reason="Customer's request"),
     )
     assert r["state"] == "canceled"
+
+
+def test_create_payout_happy_path() -> None:
+    c = client(
+        {
+            ("POST", "/transactions/payouts"): {
+                "json": {
+                    "transaction": {
+                        "uid": "1-310b0da80b",
+                        "type": "payout",
+                        "status": "successful",
+                        "amount": 100,
+                        "currency": "USD",
+                        "test": True,
+                        "tracking_id": "payout-1",
+                        "payout": {"status": "successful", "rrn": "1234"},
+                        "customer": {
+                            "ip": "127.0.0.1",
+                            "email": "john@example.com",
+                        },
+                    }
+                }
+            }
+        }
+    )
+    p = c.create_payout(
+        PayoutRequest(
+            test=True,
+            amount=100,
+            currency="USD",
+            description="Payout",
+            tracking_id="payout-1",
+            recipient=PayoutCustomer(
+                ip="127.0.0.1", email="john@example.com", birth_date="1990-10-20"
+            ),
+            sender=PayoutCustomer(
+                ip="127.0.0.1", email="john@example.com", birth_date="1990-10-20"
+            ),
+            recipient_billing_address=PayoutAddress(
+                country="US",
+                city="Denver",
+                state="CO",
+                zip="96002",
+                address="1st Street",
+            ),
+            sender_billing_address=PayoutAddress(
+                country="US",
+                city="Denver",
+                state="CO",
+                zip="96002",
+                address="1st Street",
+            ),
+        )
+    )
+    assert p.status == "successful"
+    assert p.type == "payout"
+    assert p.payout is not None
+    assert p.payout.rrn == "1234"
+
+
+def test_get_balance_happy_path() -> None:
+    c = client(
+        {
+            ("POST", "/beyag/balance"): {
+                "json": {
+                    "status": "Successful",
+                    "code": "S.0000",
+                    "gateway_id": 1234,
+                    "account": "40701810842020395221",
+                    "amount": 1290092162,
+                    "currency": "USD",
+                }
+            }
+        }
+    )
+    b = c.get_balance(
+        BalanceRequest(
+            gateway_id=1234,
+            account="40701810842020395221",
+            currency="USD",
+        )
+    )
+    assert b.status == "Successful"
+    assert b.amount == 1290092162
+
+
+def test_get_reports_happy_path() -> None:
+    c = client(
+        {
+            ("POST", "/api/reports"): {
+                "expect_version": "2",
+                "json": {
+                    "transactions": [
+                        {
+                            "uid": "20527-b7ea8c95f4",
+                            "id": 28859,
+                            "type": "authorization",
+                            "status": "failed",
+                            "amount": 1000,
+                            "currency": "USD",
+                            "credit_card": {"brand": "visa", "last_4": "1006"},
+                        }
+                    ],
+                    "count": 1,
+                },
+            }
+        }
+    )
+    r = c.get_reports(
+        ReportListRequest(
+            report_params=ReportParams(
+                date_type="created_at",
+                date="2022-01-27",
+                status="failed",
+                payment_method_type="credit_card",
+                time_zone="Europe/London",
+            )
+        )
+    )
+    assert r.count == 1
+    assert r.transactions[0].uid == "20527-b7ea8c95f4"
+
+
+def test_get_report_count_happy_path() -> None:
+    c = client(
+        {
+            ("POST", "/api/reports/count"): {
+                "expect_version": "3",
+                "json": {"transactions": {"count": 2}},
+            }
+        }
+    )
+    r = c.get_report_count(
+        ReportCountRequest(
+            report_params=ReportCountParams(
+                date_type="created_at",
+                from_="2022-01-25 00:00:00",
+                to="2022-01-27 23:59:59",
+                status="incomplete",
+                payment_method_type="credit_card",
+                time_zone="Etc/UTC",
+            )
+        )
+    )
+    assert r.transactions.count == 2
+
+
+def test_get_channel_balances_happy_path() -> None:
+    c = client(
+        {
+            ("GET", "/shop/channel_balances/"): {
+                "json": [{"gateway_id": 3405, "currency": "USD", "amount": 100}]
+            }
+        }
+    )
+    bals = c.get_channel_balances(3405, "USD")
+    assert len(bals) == 1
+    assert bals[0].gateway_id == 3405
+    assert bals[0].amount == 100

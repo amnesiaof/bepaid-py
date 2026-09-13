@@ -542,4 +542,185 @@ class WebhookTransaction(CamelModel):
     test: bool | None = None
 
 
+# ── payout ────────────────────────────────────────────────────────────────────
+
+# Payout/billing request objects must serialize with snake_case keys (the docs
+# use snake_case here), so they subclass BaseModel rather than CamelModel.
+
+
+class PayoutDocument(BaseModel):
+    type: str | None = None
+    issuer: str | None = None
+    series: str | None = None
+    number: str | None = None
+    issued_at: str | None = None
+    valid_until: str | None = None
+
+
+class PayoutAdditionalData(BaseModel):
+    document: PayoutDocument | None = None
+
+
+class PayoutCreditCard(BaseModel):
+    number: str | None = None
+    holder: str | None = None
+    exp_month: str | None = None
+    exp_year: str | None = None
+
+
+class PayoutCustomer(BaseModel):
+    ip: str | None = None
+    email: str | None = None
+    birth_date: str | None = None
+
+
+class PayoutAddress(BaseModel):
+    first_name: str | None = None
+    last_name: str | None = None
+    country: str | None = None
+    city: str | None = None
+    state: str | None = None
+    zip: str | None = None
+    address: str | None = None
+    phone: str | None = None
+
+
+class PayoutRequest(BaseModel):
+    test: bool | None = None
+    amount: int
+    currency: str
+    description: str | None = None
+    tracking_id: str | None = None
+    recipient: PayoutCustomer
+    sender: PayoutCustomer
+    recipient_billing_address: PayoutAddress
+    sender_billing_address: PayoutAddress
+    recipient_credit_card: PayoutCreditCard | None = None
+    additional_data: PayoutAdditionalData | None = None
+
+
+class Payout(CamelModel):
+    status: str | None = None
+    gateway_id: int | None = None
+    ref_id: str | None = None
+    bank_code: str | None = None
+    rrn: str | None = None
+
+
+class PayoutResponse(CamelModel):
+    uid: str | None = None
+    type: str | None = None
+    status: str | None = None
+    amount: int | None = None
+    currency: str | None = None
+    description: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+    method_type: str | None = None
+    receipt_url: str | None = None
+    message: str | None = None
+    tracking_id: str | None = None
+    test: bool | None = None
+    payout: Payout | None = None
+    customer: Customer | None = None
+    billing_address: BillingAddress | None = None
+
+
+# ── APM balance query ─────────────────────────────────────────────────────────
+
+
+class BalanceRequest(BaseModel):
+    gateway_id: int
+    account: str | None = None
+    currency: str | None = None
+
+
+class BalanceResponse(CamelModel):
+    code: str | None = None
+    status: str | None = None
+    message: str | None = None
+    friendly_message: str | None = None
+    gateway_id: int | None = None
+    account: str | None = None
+    amount: int | None = None
+    currency: str | None = None
+    provider_info: dict[str, Any] | None = None
+
+
+# ── merchant reports ──────────────────────────────────────────────────────────
+
+
+class ReportParams(BaseModel):
+    date_type: str
+    date: str
+    status: str
+    payment_method_type: str
+    time_zone: str
+
+
+class ReportCountParams(BaseModel):
+    date_type: str
+    from_: str = Field(serialization_alias="from")
+    to: str
+    status: str
+    payment_method_type: str
+    time_zone: str
+
+
+class ReportTransaction(CamelModel):
+    id: int | None = None
+    uid: str | None = None
+    type: str | None = None
+    payment_method_type: str | None = None
+    status: str | None = None
+    message: str | None = None
+    amount: int | None = None
+    discount_rate: float | None = None
+    transaction_rate: float | None = None
+    transaction_fee: float | None = None
+    pay_to_merchant: float | None = None
+    test: bool | None = None
+    currency: str | None = None
+    description: str | None = None
+    tracking_id: str | None = None
+    order_id: int | None = None
+    created_at: str | None = None
+    paid_at: str | None = None
+    settled_at: str | None = None
+    manually_corrected_at: str | None = None
+    billing_address: BillingAddress | None = None
+    customer: Customer | None = None
+    credit_card: dict[str, Any] | None = None
+    payment: dict[str, Any] | None = None
+    three_d_secure_verification: dict[str, Any] | None = None
+    additional_data: dict[str, Any] | None = None
+
+
+class ReportListRequest(BaseModel):
+    report_params: ReportParams
+
+
+class ReportListResponse(CamelModel):
+    transactions: list[ReportTransaction]
+    count: int | None = None
+
+
+class ReportCountRequest(BaseModel):
+    report_params: ReportCountParams
+
+
+class ReportCountResult(CamelModel):
+    count: int
+
+
+class ReportCountResponse(CamelModel):
+    transactions: ReportCountResult
+
+
+class ChannelBalance(CamelModel):
+    gateway_id: int | None = None
+    currency: str | None = None
+    amount: int | None = None
+
+
 WebhookNotification.model_rebuild()
