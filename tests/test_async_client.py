@@ -78,6 +78,7 @@ async def test_async_authorization_redirect() -> None:
                 amount=100, currency="USD", description="Test", tracking_id="x"
             )
         )
+        assert resp.redirect_url is not None
         assert resp.redirect_url.endswith("/process/b6c446e4")
 
 

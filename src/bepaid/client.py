@@ -4,8 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from collections.abc import Awaitable
-from typing import Any, Self, TypeVar
+import sys
+from collections.abc import Coroutine
+from typing import Any, TypeVar
+
+if sys.version_info >= (3, 11):
+    from typing import Self
+else:
+    from typing_extensions import Self
 
 import httpx
 from pydantic import BaseModel
@@ -238,21 +244,27 @@ class BepaidClient:
         base_api_url: str = DEFAULT_API_URL,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
-        self._client_kw = {
-            "shop_id": shop_id,
-            "secret_key": secret_key,
-            "timeout": timeout,
-            "base_gateway_url": base_gateway_url,
-            "base_checkout_url": base_checkout_url,
-            "base_api_url": base_api_url,
-            "transport": transport,
-        }
+        self._shop_id = shop_id
+        self._secret_key = secret_key
+        self._timeout = timeout
+        self._base_gateway = base_gateway_url
+        self._base_checkout = base_checkout_url
+        self._base_api = base_api_url
+        self._transport = transport
 
-    def _run(self, coro: Awaitable[T]) -> T:
+    def _run(self, coro: Coroutine[Any, Any, T]) -> T:
         return asyncio.run(coro)
 
     def _client(self) -> AsyncBepaidClient:
-        return AsyncBepaidClient(**self._client_kw)
+        return AsyncBepaidClient(
+            self._shop_id,
+            self._secret_key,
+            timeout=self._timeout,
+            base_gateway_url=self._base_gateway,
+            base_checkout_url=self._base_checkout,
+            base_api_url=self._base_api,
+            transport=self._transport,
+        )
 
     async def _call(self, operation: str, *args: object) -> Any:
         async with self._client() as client:

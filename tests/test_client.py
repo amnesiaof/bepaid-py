@@ -141,6 +141,7 @@ def test_create_authorization_returns_redirect() -> None:
         )
     )
     assert resp.status == "incomplete"
+    assert resp.redirect_url is not None
     assert resp.redirect_url.endswith("/process/b6c446e4")
     assert resp.three_d_secure_verification is not None
 
@@ -214,6 +215,7 @@ def test_get_transaction() -> None:
     t = c.get_transaction("2f4d67ff")
     assert t.status == "successful"
     assert t.code == "S.0000"
+    assert t.credit_card is not None
     assert t.credit_card.brand == "visa"
 
 
