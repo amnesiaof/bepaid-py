@@ -810,4 +810,42 @@ class Product(CamelModel):
     confirm_url: str | None = None
 
 
+# ── gateway: saved-card charges ─────────────────────────────────────────
+
+
+class ChargeCreditCard(BaseModel):
+    number: str | None = None
+    verification_value: str | None = None
+    holder: str | None = None
+    exp_month: int | None = None
+    exp_year: int | None = None
+    token: str | None = None
+    skip_three_d_secure_verification: bool | None = None
+
+
+class ChargeAdditionalData(BaseModel):
+    contract: list[str] | None = None
+    excluded_gateways: list[str] | None = None
+    browser: BrowserInfo | None = None
+
+
+class ChargeRequest(BaseModel):
+    amount: int
+    currency: str
+    description: str
+    tracking_id: str | None = None
+    expired_at: str | None = None
+    duplicate_check: bool | None = None
+    dynamic_billing_descriptor: str | None = None
+    language: str | None = None
+    notification_url: str | None = None
+    verification_url: str | None = None
+    return_url: str | None = None
+    test: bool | None = None
+    force_three_d_secure_verification: bool | None = None
+    credit_card: ChargeCreditCard
+    customer: Customer | None = None
+    additional_data: ChargeAdditionalData | None = None
+
+
 WebhookNotification.model_rebuild()

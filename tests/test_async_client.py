@@ -12,6 +12,8 @@ from bepaid.models import (
     ApmRefundRequest,
     AuthorizationRequest,
     BalanceRequest,
+    ChargeCreditCard,
+    ChargeRequest,
     CheckoutOrder,
     CheckoutOrderAdditionalData,
     CheckoutRequest,
@@ -165,6 +167,40 @@ async def test_async_payment_token() -> None:
             )
         )
         assert p.token == "3241e439f8c87d941d92621a4bdc030d"
+    finally:
+        await c.aclose()
+
+
+@pytest.mark.asyncio
+async def test_async_charge_saved_card() -> None:
+    c = async_client(
+        {
+            ("POST", "/services/credit_cards/charges"): {
+                "expect_version": "3",
+                "json": {
+                    "transaction": {
+                        "uid": "1-310b0da80b",
+                        "type": "payment",
+                        "status": "successful",
+                        "amount": 700,
+                        "currency": "USD",
+                        "test": True,
+                    }
+                },
+            }
+        }
+    )
+    try:
+        resp = await c.charge_saved_card(
+            ChargeRequest(
+                amount=700,
+                currency="USD",
+                description="Saved card charge",
+                credit_card=ChargeCreditCard(token="tok_123"),
+            )
+        )
+        assert resp.uid == "1-310b0da80b"
+        assert resp.status == "successful"
     finally:
         await c.aclose()
 

@@ -18,6 +18,8 @@ from bepaid.models import (
     BalanceRequest,
     CancelSubscriptionRequest,
     CaptureRequest,
+    ChargeCreditCard,
+    ChargeRequest,
     CheckoutOrder,
     CheckoutOrderAdditionalData,
     CheckoutRequest,
@@ -218,6 +220,40 @@ def test_refund() -> None:
     resp = c.refund(RefundRequest(parent_uid="p1", amount=50, reason="Client request"))
     assert resp.status == "successful"
     assert resp.type == "refund"
+
+
+def test_charge_saved_card() -> None:
+    c = client(
+        {
+            ("POST", "/services/credit_cards/charges"): {
+                "expect_version": "3",
+                "json": {
+                    "transaction": {
+                        "uid": "1-310b0da80b",
+                        "type": "payment",
+                        "status": "successful",
+                        "amount": 700,
+                        "currency": "USD",
+                        "test": True,
+                        "credit_card": {
+                            "last_4": "1006",
+                            "brand": "visa",
+                        },
+                    }
+                },
+            }
+        }
+    )
+    resp = c.charge_saved_card(
+        ChargeRequest(
+            amount=700,
+            currency="USD",
+            description="Saved card charge",
+            credit_card=ChargeCreditCard(token="tok_123"),
+        )
+    )
+    assert resp.uid == "1-310b0da80b"
+    assert resp.status == "successful"
 
 
 def test_get_transaction() -> None:

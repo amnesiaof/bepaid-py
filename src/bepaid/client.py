@@ -35,6 +35,7 @@ from .models import (
     CaptureRequest,
     CaptureResponse,
     ChannelBalance,
+    ChargeRequest,
     CheckoutRequest,
     CheckoutResponse,
     CheckoutStatus,
@@ -196,6 +197,17 @@ class AsyncBepaidClient:
 
     async def get_transaction(self, uid: str) -> Transaction:
         data = await self._request("GET", f"{self._base_gateway}/transactions/{uid}")
+        return Transaction.model_validate(data["transaction"])
+
+    # ── saved-card charges ─────────────────────────────────────────────────
+
+    async def charge_saved_card(self, req: ChargeRequest) -> Transaction:
+        data = await self._request(
+            "POST",
+            f"{self._base_gateway}/services/credit_cards/charges",
+            {"request": req.model_dump(by_alias=True, exclude_none=True)},
+            api_version="3",
+        )
         return Transaction.model_validate(data["transaction"])
 
     # ── token API ──────────────────────────────────────────────────────────
@@ -509,6 +521,11 @@ class BepaidClient:
 
     def get_transaction(self, uid: str) -> Transaction:
         return self._invoke("get_transaction", uid)
+
+    # ── saved-card charges ─────────────────────────────────────────────────
+
+    def charge_saved_card(self, req: ChargeRequest) -> Transaction:
+        return self._invoke("charge_saved_card", req)
 
     # ── token API ──────────────────────────────────────────────────────────
 
