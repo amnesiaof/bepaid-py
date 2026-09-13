@@ -1,6 +1,6 @@
 [project]
 name = "bepaid"
-version = "0.3.1"
+version = "0.3.0"
 description = "Client for the bePaid payment API (bepaid.by)"
 readme = "README.md"
 license = "MIT"
@@ -11,7 +11,6 @@ requires-python = ">=3.10"
 dependencies = [
     "httpx>=0.27",
     "pydantic>=2.7",
-    "typing_extensions>=4.11; python_version < '3.11'",
 ]
 
 [project.urls]
