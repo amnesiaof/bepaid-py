@@ -7,7 +7,7 @@ import json
 import httpx
 import pytest
 
-from bepaid import BepaidClient, BepaidError
+from bepaid import AsyncBepaidClient, BepaidClient, BepaidError
 from bepaid.client import verify_webhook_auth
 from bepaid.errors import ApiError
 from bepaid.models import (
@@ -49,9 +49,11 @@ class MockTransport(httpx.MockTransport):
 
 
 def client(handlers: dict) -> BepaidClient:
-    c = BepaidClient(SHOP_ID, SECRET)
-    c._http = httpx.Client(transport=MockTransport(handlers))
-    return c
+    return BepaidClient(SHOP_ID, SECRET, transport=MockTransport(handlers))
+
+
+def async_client(handlers: dict) -> AsyncBepaidClient:
+    return AsyncBepaidClient(SHOP_ID, SECRET, transport=MockTransport(handlers))
 
 
 def _payment_request() -> PaymentRequest:

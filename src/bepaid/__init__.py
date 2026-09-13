@@ -1,7 +1,7 @@
 """bePaid payment API client (bepaid.by)."""
 
-from .client import BepaidClient
+from .client import AsyncBepaidClient, BepaidClient
 from .errors import ApiError, BepaidError
 
-__all__ = ["ApiError", "BepaidClient", "BepaidError"]
-__version__ = "0.1.0"
+__all__ = ["ApiError", "AsyncBepaidClient", "BepaidClient", "BepaidError"]
+__version__ = "0.2.0"

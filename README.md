@@ -44,12 +44,27 @@ payment = client.create_payment(
 )
 ```
 
-Use the client as a context manager to close the underlying HTTP connection:
+### Async
+
+`AsyncBepaidClient` mirrors the synchronous API and supports `async with`:
 
 ```python
-with BepaidClient("shop_id", "secret_key") as client:
-    payment = client.create_payment(...)
+from bepaid import AsyncBepaidClient
+
+async with AsyncBepaidClient("shop_id", "secret_key") as client:
+    payment = await client.create_payment(...)
+
+# or without the context manager:
+client = AsyncBepaidClient("shop_id", "secret_key")
+try:
+    payment = await client.create_payment(...)
+finally:
+    await client.aclose()
 ```
+
+`BepaidClient` is a thin synchronous wrapper around `AsyncBepaidClient`
+(each call runs on a fresh event loop, so it does not reuse connections);
+prefer the async client inside an asyncio application.
 
 ### Authorization with 3-D Secure
 

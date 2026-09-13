@@ -1,6 +1,6 @@
 [project]
 name = "bepaid"
-version = "0.1.0"
+version = "0.2.0"
 description = "Client for the bePaid payment API (bepaid.by)"
 readme = "README.md"
 license = "MIT"
@@ -24,4 +24,5 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
 ]
