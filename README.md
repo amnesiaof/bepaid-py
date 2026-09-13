@@ -127,6 +127,15 @@ assert verify_webhook_auth(authorization_header, shop_id, secret_key)
 notification = WebhookNotification.model_validate_json(raw_body)
 ```
 
+## Examples
+
+Ready-to-run scripts under [`examples/`](examples/):
+
+| Example | Run |
+|---------|-----|
+| [`payment.py`](examples/payment.py) | `SHOP_ID=363 SECRET_KEY=secret uv run python examples/payment.py` |
+| [`subscriptions.py`](examples/subscriptions.py) | `SHOP_ID=363 SECRET_KEY=secret uv run python examples/subscriptions.py` |
+
 ## API coverage
 
 | Group         | Operations |
