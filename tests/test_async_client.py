@@ -368,6 +368,9 @@ async def test_async_products() -> None:
             ("POST", "/products"): {"json": product},
             ("GET", "/products"): {"json": [product]},
             ("PUT", "/products/prd_1"): {"status": 204},
+            ("GET", "/plans/pln_a134847c902551de/pay"): {
+                "json": {"redirect_url": "https://checkout.bepaid.by/pay?token=abc"}
+            },
         }
     )
     try:
@@ -384,5 +387,7 @@ async def test_async_products() -> None:
         listed = await c.list_products()
         assert len(listed) == 1
         await c.update_product("prd_1", ProductUpdateRequest(amount=950, quantity="5"))
+        link = await c.get_plan_payment_link("pln_a134847c902551de")
+        assert link["redirect_url"] == "https://checkout.bepaid.by/pay?token=abc"
     finally:
         await c.aclose()

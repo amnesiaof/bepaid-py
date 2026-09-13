@@ -8,7 +8,7 @@ import httpx
 import pytest
 
 from bepaid import AsyncBepaidClient, BepaidClient, BepaidError
-from bepaid.client import verify_webhook_auth
+from bepaid.client import verify_webhook_auth, verify_webhook_signature
 from bepaid.errors import ApiError
 from bepaid.models import (
     ApmConfirmRequest,
@@ -371,6 +371,42 @@ def test_apm_payment_and_refund() -> None:
 )
 def test_verify_webhook_auth(header: str, expected: bool) -> None:
     assert verify_webhook_auth(header, SHOP_ID, SECRET) is expected
+
+
+def test_verify_webhook_signature() -> None:
+    import base64
+
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import padding, rsa
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_key_pem = (
+        key.public_key()
+        .public_bytes(
+            serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode()
+    )
+    body = b'{"transaction":{"uid":"123"}}'
+    signature = base64.b64encode(
+        key.sign(body, padding.PKCS1v15(), hashes.SHA256())
+    ).decode()
+
+    assert verify_webhook_signature(public_key_pem, signature, body) is True
+    assert verify_webhook_signature(public_key_pem, signature, b"tampered") is False
+
+
+def test_get_plan_payment_link() -> None:
+    c = client(
+        {
+            ("GET", "/plans/pln_a134847c902551de/pay"): {
+                "json": {"redirect_url": "https://checkout.bepaid.by/pay?token=abc"}
+            }
+        }
+    )
+    link = c.get_plan_payment_link("pln_a134847c902551de")
+    assert link["redirect_url"] == "https://checkout.bepaid.by/pay?token=abc"
 
 
 def test_errors_baseclass() -> None:

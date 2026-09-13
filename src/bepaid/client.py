@@ -14,6 +14,9 @@ else:
     from typing_extensions import Self
 
 import httpx
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from pydantic import BaseModel
 
 from .errors import ApiError
@@ -342,6 +345,9 @@ class AsyncBepaidClient:
             req.model_dump(by_alias=True, exclude_none=True),
         )
 
+    async def get_plan_payment_link(self, plan_id: str) -> dict[str, Any]:
+        return await self._request("GET", f"{self._base_api}/plans/{plan_id}/pay")
+
     # ── payout ─────────────────────────────────────────────────────────────
 
     async def create_payout(self, req: PayoutRequest) -> PayoutResponse:
@@ -577,6 +583,9 @@ class BepaidClient:
     ) -> dict[str, Any]:
         return self._invoke("cancel_subscription", id, req)
 
+    def get_plan_payment_link(self, plan_id: str) -> dict[str, Any]:
+        return self._invoke("get_plan_payment_link", plan_id)
+
     # ── payout ─────────────────────────────────────────────────────────────
 
     def create_payout(self, req: PayoutRequest) -> PayoutResponse:
@@ -628,3 +637,24 @@ def verify_webhook_auth(
 ) -> bool:
     expected = "Basic " + base64.b64encode(f"{shop_id}:{secret_key}".encode()).decode()
     return authorization_header == expected
+
+
+def verify_webhook_signature(
+    public_key_pem: str, signature: str, raw_body: bytes
+) -> bool:
+    """Verify the RSA-SHA256 ``Content-Signature`` of a bePaid webhook.
+
+    ``public_key_pem`` is the shop's public key from the bePaid dashboard,
+    ``signature`` is the base64 ``Content-Signature`` header value, and
+    ``raw_body`` is the raw UTF-8 body bytes of the notification. Returns
+    ``True`` for a genuine signature, ``False`` when it does not match.
+    """
+    public_key = serialization.load_pem_public_key(public_key_pem.encode())
+    if not isinstance(public_key, rsa.RSAPublicKey):
+        return False
+    decoded = base64.b64decode(signature)
+    try:
+        public_key.verify(decoded, raw_body, padding.PKCS1v15(), hashes.SHA256())
+    except InvalidSignature:
+        return False
+    return True
