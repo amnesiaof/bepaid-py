@@ -50,6 +50,8 @@ from .models import (
     ReportCountResponse,
     ReportListRequest,
     ReportListResponse,
+    SplitPaymentRequest,
+    SplitPaymentResponse,
     Subscription,
     SubscriptionCreateRequest,
     TokenResponse,
@@ -377,6 +379,18 @@ class AsyncBepaidClient:
         )
         return [ChannelBalance.model_validate(item) for item in data]
 
+    # ── split payments ──────────────────────────────────────────────────────
+
+    async def create_split_payment(
+        self, req: SplitPaymentRequest
+    ) -> SplitPaymentResponse:
+        data = await self._request(
+            "POST",
+            f"{self._base_api}/splits/payment",
+            {"request": req.model_dump(by_alias=True, exclude_none=True)},
+        )
+        return SplitPaymentResponse.model_validate(data)
+
 
 class BepaidClient:
     """Synchronous wrapper around :class:`AsyncBepaidClient`.
@@ -541,6 +555,11 @@ class BepaidClient:
         self, gateway_id: int, currency: str | None = None
     ) -> list[ChannelBalance]:
         return self._invoke("get_channel_balances", gateway_id, currency)
+
+    # ── split payments ──────────────────────────────────────────────────────
+
+    def create_split_payment(self, req: SplitPaymentRequest) -> SplitPaymentResponse:
+        return self._invoke("create_split_payment", req)
 
 
 # ── webhook helpers ──────────────────────────────────────────────────────────

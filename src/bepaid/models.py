@@ -723,4 +723,41 @@ class ChannelBalance(CamelModel):
     amount: int | None = None
 
 
+# ── split payments ─────────────────────────────────────────────────────────────
+
+
+class SplitCreditCard(BaseModel):
+    token: str
+
+
+class SplitAdditionalData(BaseModel):
+    contract: str | None = None
+    split: dict[str, int]
+
+
+class SplitPaymentRequest(BaseModel):
+    amount: int
+    currency: str
+    description: str
+    tracking_id: str
+    billing_address: BillingAddress | None = None
+    credit_card: SplitCreditCard
+    customer: Customer | None = None
+    additional_data: SplitAdditionalData | None = None
+
+
+class SplitItem(CamelModel):
+    uid: str | None = None
+    amount: int | None = None
+    status: str | None = None
+    message: str | None = None
+    shop_id: int | None = None
+    parent: bool | None = None
+    parent_uid: str | None = None
+
+
+class SplitPaymentResponse(CamelModel):
+    splits: list[SplitItem]
+
+
 WebhookNotification.model_rebuild()

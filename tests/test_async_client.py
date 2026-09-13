@@ -19,6 +19,9 @@ from bepaid.models import (
     PayoutRequest,
     ReportCountParams,
     ReportCountRequest,
+    SplitAdditionalData,
+    SplitCreditCard,
+    SplitPaymentRequest,
     SubscriptionCreateRequest,
 )
 
@@ -261,5 +264,46 @@ async def test_async_report_count() -> None:
             )
         )
         assert r.transactions.count == 2
+    finally:
+        await c.aclose()
+
+
+@pytest.mark.asyncio
+async def test_async_split_payment() -> None:
+    c = async_client(
+        {
+            ("POST", "/splits/payment"): {
+                "json": {
+                    "splits": [
+                        {
+                            "uid": "21-99834feb0b",
+                            "amount": 70,
+                            "shop_id": 91,
+                            "parent": True,
+                        },
+                        {
+                            "uid": "22-56784ffecd",
+                            "amount": 30,
+                            "shop_id": 1111,
+                            "parent": False,
+                        },
+                    ]
+                }
+            }
+        }
+    )
+    try:
+        r = await c.create_split_payment(
+            SplitPaymentRequest(
+                amount=100,
+                currency="USD",
+                description="Split payment",
+                tracking_id="split-1",
+                credit_card=SplitCreditCard(token="token_123"),
+                additional_data=SplitAdditionalData(split={"241": 40, "242": 50}),
+            )
+        )
+        assert len(r.splits) == 2
+        assert r.splits[0].parent is True
     finally:
         await c.aclose()

@@ -33,6 +33,9 @@ from bepaid.models import (
     ReportCountRequest,
     ReportListRequest,
     ReportParams,
+    SplitAdditionalData,
+    SplitCreditCard,
+    SplitPaymentRequest,
     SubscriptionCreateRequest,
     VoidRequest,
 )
@@ -672,3 +675,44 @@ def test_get_channel_balances_happy_path() -> None:
     assert len(bals) == 1
     assert bals[0].gateway_id == 3405
     assert bals[0].amount == 100
+
+
+def test_create_split_payment_happy_path() -> None:
+    c = client(
+        {
+            ("POST", "/splits/payment"): {
+                "json": {
+                    "splits": [
+                        {
+                            "uid": "21-99834feb0b",
+                            "amount": 70,
+                            "status": "successful",
+                            "shop_id": 91,
+                            "parent": True,
+                        },
+                        {
+                            "uid": "22-56784ffecd",
+                            "amount": 30,
+                            "status": "successful",
+                            "shop_id": 1111,
+                            "parent": False,
+                            "parent_uid": "21-99834feb0b",
+                        },
+                    ]
+                }
+            }
+        }
+    )
+    r = c.create_split_payment(
+        SplitPaymentRequest(
+            amount=100,
+            currency="USD",
+            description="Split payment",
+            tracking_id="split-1",
+            credit_card=SplitCreditCard(token="token_123"),
+            additional_data=SplitAdditionalData(split={"241": 40, "242": 50}),
+        )
+    )
+    assert len(r.splits) == 2
+    assert r.splits[0].parent is True
+    assert r.splits[1].parent_uid == "21-99834feb0b"
