@@ -31,6 +31,7 @@ class Customer(CamelModel):
     email: str | None = None
     device_id: str | None = None
     birth_date: str | None = None
+    phone: str | None = None
 
 
 class BrowserInfo(CamelModel):
@@ -327,6 +328,14 @@ class CheckoutStatus(CamelModel):
 # ── direct / APM API ──────────────────────────────────────────────────────────
 
 
+class EripDevice(CamelModel):
+    name: str
+    item_unit: str
+    rank: str
+    value: str
+    rate: str
+
+
 class ApmPaymentRequest(CamelModel):
     amount: int
     currency: str
@@ -344,6 +353,53 @@ class ApmPaymentRequest(CamelModel):
     customer: Customer | None = None
     payment_method: dict[str, Any] = Field(alias="paymentMethod")
     additional_data: dict[str, Any] | None = None
+
+    @classmethod
+    def erip(
+        cls, amount: int, currency: str, account_number: str, service_no: str
+    ) -> ApmPaymentRequest:
+        return cls(
+            amount=amount,
+            currency=currency,
+            payment_method={
+                "type": "erip",
+                "account_number": account_number,
+                "service_no": service_no,
+            },
+        )
+
+    @classmethod
+    def mts_money(
+        cls, amount: int, currency: str, phone: str, confirm_agreement: str
+    ) -> ApmPaymentRequest:
+        return cls(
+            amount=amount,
+            currency=currency,
+            customer=Customer(phone=phone),
+            payment_method={
+                "type": "mts_money",
+                "confirm_agreement": confirm_agreement,
+            },
+        )
+
+    @classmethod
+    def krok(cls, amount: int, currency: str, return_url: str) -> ApmPaymentRequest:
+        return cls(
+            amount=amount,
+            currency=currency,
+            return_url=return_url,
+            payment_method={"type": "krok"},
+        )
+
+    @classmethod
+    def qiwi_terminal(
+        cls, amount: int, currency: str, account: str
+    ) -> ApmPaymentRequest:
+        return cls(
+            amount=amount,
+            currency=currency,
+            payment_method={"type": "qiwi_terminal", "account": account},
+        )
 
 
 class ApmPaymentResponse(CamelModel):

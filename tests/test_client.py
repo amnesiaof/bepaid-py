@@ -26,6 +26,7 @@ from bepaid.models import (
     CreateTokenRequest,
     CurrencyQueryRequest,
     CustomerRecord,
+    EripDevice,
     Fiscalization,
     FiscalizationPosition,
     FiscalizationTax,
@@ -569,6 +570,108 @@ def test_apm_payment_and_refund() -> None:
     assert p.status == "pending"
     r = c.apm_refund(ApmRefundRequest(parent_uid="apm1", reason="reason"))
     assert r.status == "successful"
+
+
+def test_apm_payment_constructors_serialize() -> None:
+    device = EripDevice(
+        name="Холодная вода", item_unit="м3", rank="4", value="1234", rate="0.4392"
+    )
+    cases = [
+        (
+            ApmPaymentRequest.erip(1000, "BYN", "123", "99999999"),
+            {
+                "request": {
+                    "amount": 1000,
+                    "currency": "BYN",
+                    "paymentMethod": {
+                        "type": "erip",
+                        "account_number": "123",
+                        "service_no": "99999999",
+                    },
+                }
+            },
+        ),
+        (
+            ApmPaymentRequest.mts_money(100, "BYN", "375295222222", "accept"),
+            {
+                "request": {
+                    "amount": 100,
+                    "currency": "BYN",
+                    "customer": {"phone": "375295222222"},
+                    "paymentMethod": {
+                        "type": "mts_money",
+                        "confirm_agreement": "accept",
+                    },
+                }
+            },
+        ),
+        (
+            ApmPaymentRequest.krok(220, "BYN", "https://example.com/return"),
+            {
+                "request": {
+                    "amount": 220,
+                    "currency": "BYN",
+                    "returnUrl": "https://example.com/return",
+                    "paymentMethod": {"type": "krok"},
+                }
+            },
+        ),
+        (
+            ApmPaymentRequest.qiwi_terminal(1000, "RUB", "test_account_123"),
+            {
+                "request": {
+                    "amount": 1000,
+                    "currency": "RUB",
+                    "paymentMethod": {
+                        "type": "qiwi_terminal",
+                        "account": "test_account_123",
+                    },
+                }
+            },
+        ),
+    ]
+    for req, expected in cases:
+        c = client(
+            {
+                ("POST", "/beyag/transactions/payments"): {
+                    "expect_body": expected,
+                    "json": {"transaction": {"uid": "u", "status": "pending"}},
+                }
+            }
+        )
+        p = c.create_apm_payment(req)
+        assert p.status == "pending"
+
+    req = ApmPaymentRequest.erip(1000, "BYN", "123", "99999999")
+    req.payment_method["erip_devices"] = [device.model_dump()]
+    c = client(
+        {
+            ("POST", "/beyag/transactions/payments"): {
+                "expect_body": {
+                    "request": {
+                        "amount": 1000,
+                        "currency": "BYN",
+                        "paymentMethod": {
+                            "type": "erip",
+                            "account_number": "123",
+                            "service_no": "99999999",
+                            "erip_devices": [
+                                {
+                                    "name": "Холодная вода",
+                                    "item_unit": "м3",
+                                    "rank": "4",
+                                    "value": "1234",
+                                    "rate": "0.4392",
+                                }
+                            ],
+                        },
+                    }
+                },
+                "json": {"transaction": {"uid": "u", "status": "pending"}},
+            }
+        }
+    )
+    assert c.create_apm_payment(req).status == "pending"
 
 
 @pytest.mark.parametrize(
