@@ -106,6 +106,8 @@ class PaymentRequest(CamelModel):
     tracking_id: str
     language: str | None = None
     notification_url: str | None = None
+    verification_url: str | None = None
+    return_url: str | None = None
     billing_address: BillingAddress | None = None
     credit_card: CreditCardRaw | None = None
     customer: Customer | None = None

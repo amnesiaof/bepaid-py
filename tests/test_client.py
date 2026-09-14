@@ -145,6 +145,38 @@ def test_api_error_raises() -> None:
     assert exc.value.errors == {"amount": ["can't be blank"]}
 
 
+def test_create_payment_serializes_h2h_fields() -> None:
+    c = client(
+        {
+            ("POST", "/transactions/payments"): {
+                "json": {"transaction": {"uid": "u1"}},
+                "expect_body": {
+                    "request": {
+                        "amount": "700",
+                        "currency": "USD",
+                        "test": True,
+                        "description": "Test transaction",
+                        "trackingId": "tracking_id_000",
+                        "returnUrl": "https://example.com/return",
+                        "verificationUrl": "https://example.com/verify",
+                    }
+                },
+            }
+        }
+    )
+    c.create_payment(
+        PaymentRequest(
+            amount="700",
+            currency="USD",
+            test=True,
+            description="Test transaction",
+            tracking_id="tracking_id_000",
+            return_url="https://example.com/return",
+            verification_url="https://example.com/verify",
+        )
+    )
+
+
 def test_create_authorization_returns_redirect() -> None:
     c = client(
         {
