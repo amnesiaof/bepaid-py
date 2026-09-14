@@ -40,6 +40,8 @@ from .models import (
     CheckoutResponse,
     CheckoutStatus,
     CreateTokenRequest,
+    CurrencyInfo,
+    CurrencyQueryRequest,
     CustomerRecord,
     P2pRequest,
     P2pResponse,
@@ -400,6 +402,16 @@ class AsyncBepaidClient:
         )
         return BalanceResponse.model_validate(data)
 
+    # ── APM currency query ───────────────────────────────────────────────────
+
+    async def get_currencies(self, req: CurrencyQueryRequest) -> CurrencyInfo:
+        data = await self._request(
+            "POST",
+            f"{self._base_api}/beyag/currencies",
+            req.model_dump(by_alias=True, exclude_none=True),
+        )
+        return CurrencyInfo.model_validate(data)
+
     # ── merchant reports ────────────────────────────────────────────────────
 
     async def get_reports(self, req: ReportListRequest) -> ReportListResponse:
@@ -644,6 +656,11 @@ class BepaidClient:
 
     def get_balance(self, req: BalanceRequest) -> BalanceResponse:
         return self._invoke("get_balance", req)
+
+    # ── APM currency query ───────────────────────────────────────────────────
+
+    def get_currencies(self, req: CurrencyQueryRequest) -> CurrencyInfo:
+        return self._invoke("get_currencies", req)
 
     # ── merchant reports ────────────────────────────────────────────────────
 

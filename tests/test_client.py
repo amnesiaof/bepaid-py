@@ -24,6 +24,7 @@ from bepaid.models import (
     CheckoutOrderAdditionalData,
     CheckoutRequest,
     CreateTokenRequest,
+    CurrencyQueryRequest,
     CustomerRecord,
     P2pRequest,
     PaymentRequest,
@@ -744,6 +745,43 @@ def test_get_balance_happy_path() -> None:
     )
     assert b.status == "Successful"
     assert b.amount == 1290092162
+
+
+def test_currency_query_happy_path() -> None:
+    c = client(
+        {
+            ("POST", "/beyag/currencies"): {
+                "json": {
+                    "status": "Successful",
+                    "code": "S.0000",
+                    "friendly_message": "Successfully processed",
+                    "gateway_id": 1234,
+                    "account": "40701810842020395221",
+                    "country": "GB",
+                    "currency": "TRX",
+                    "provider_info": {
+                        "currency": "TRX",
+                        "alias": "Tron",
+                        "allowDeposit": True,
+                        "allowWithdrawal": True,
+                        "priceUSD": "0.05963000",
+                        "networks": [{"name": "tron"}],
+                    },
+                }
+            }
+        }
+    )
+    info = c.get_currencies(
+        CurrencyQueryRequest(
+            gateway_id=1234,
+            account="40701810842020395221",
+            country="GB",
+        )
+    )
+    assert info.status == "Successful"
+    assert info.currency == "TRX"
+    assert info.provider_info is not None
+    assert info.provider_info["networks"][0]["name"] == "tron"
 
 
 def test_get_reports_happy_path() -> None:

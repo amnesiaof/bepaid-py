@@ -654,6 +654,27 @@ class BalanceResponse(CamelModel):
     provider_info: dict[str, Any] | None = None
 
 
+# ── APM currency query ────────────────────────────────────────────────────────
+
+
+class CurrencyQueryRequest(BaseModel):
+    gateway_id: int
+    account: str | None = None
+    country: str | None = None
+
+
+class CurrencyInfo(CamelModel):
+    code: str | None = None
+    status: str | None = None
+    message: str | None = None
+    friendly_message: str | None = None
+    gateway_id: int | None = None
+    account: str | None = None
+    country: str | None = None
+    currency: str | None = None
+    provider_info: dict[str, Any] | None = None
+
+
 # ── merchant reports ──────────────────────────────────────────────────────────
 
 

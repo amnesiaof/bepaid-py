@@ -17,6 +17,7 @@ from bepaid.models import (
     CheckoutOrder,
     CheckoutOrderAdditionalData,
     CheckoutRequest,
+    CurrencyQueryRequest,
     P2pRequest,
     PaymentRequest,
     PayoutCreditCard,
@@ -460,5 +461,33 @@ async def test_async_products() -> None:
         await c.update_product("prd_1", ProductUpdateRequest(amount=950, quantity="5"))
         link = await c.get_plan_payment_link("pln_a134847c902551de")
         assert link["redirect_url"] == "https://checkout.bepaid.by/pay?token=abc"
+    finally:
+        await c.aclose()
+
+
+@pytest.mark.asyncio
+async def test_async_currency_query() -> None:
+    c = async_client(
+        {
+            ("POST", "/beyag/currencies"): {
+                "json": {
+                    "status": "Successful",
+                    "code": "S.0000",
+                    "gateway_id": 1234,
+                    "country": "GB",
+                    "currency": "TRX",
+                    "provider_info": {"networks": [{"name": "tron"}]},
+                }
+            }
+        }
+    )
+    try:
+        info = await c.get_currencies(
+            CurrencyQueryRequest(gateway_id=1234, account="40701810842020395221")
+        )
+        assert info.status == "Successful"
+        assert info.currency == "TRX"
+        assert info.provider_info is not None
+        assert info.provider_info["networks"][0]["name"] == "tron"
     finally:
         await c.aclose()
