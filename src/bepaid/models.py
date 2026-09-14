@@ -887,4 +887,20 @@ class RecipientTokenizationRequest(BaseModel):
     additional_data: RecipientTokenizationAdditionalData | None = None
 
 
+# ── gateway: tracking-id status query ─────────────────────────────────────────
+
+
+class TrackingCvcVerification(CamelModel):
+    result_code: str | None = None
+
+
+class TrackingIdStatus(CamelModel):
+    uid: str
+    transaction_status: str | None = None
+    result_code: str | None = None
+    cvc_verification: TrackingCvcVerification | None = None
+    customer: Customer | None = None
+    billing_address: BillingAddress | None = None
+
+
 WebhookNotification.model_rebuild()

@@ -321,6 +321,29 @@ def test_get_transaction() -> None:
     assert t.credit_card.brand == "visa"
 
 
+def test_transaction_status_by_tracking_id() -> None:
+    c = client(
+        {
+            ("GET", "/v2/transactions/tracking_id/order-123"): {
+                "json": {
+                    "uid": "54c70f9b-e6e5-4b5a-bda2-fe6980e44bf0",
+                    "transaction_status": "approved",
+                    "result_code": "0",
+                    "cvc_verification": {"result_code": "1"},
+                    "billing_address": {"city": "Denver"},
+                }
+            }
+        }
+    )
+    t = c.get_transaction_by_tracking_id("order-123")
+    assert t.uid == "54c70f9b-e6e5-4b5a-bda2-fe6980e44bf0"
+    assert t.transaction_status == "approved"
+    assert t.cvc_verification is not None
+    assert t.cvc_verification.result_code == "1"
+    assert t.billing_address is not None
+    assert t.billing_address.city == "Denver"
+
+
 def test_create_token() -> None:
     c = client(
         {

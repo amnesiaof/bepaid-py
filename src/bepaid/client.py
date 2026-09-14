@@ -65,6 +65,7 @@ from .models import (
     Subscription,
     SubscriptionCreateRequest,
     TokenResponse,
+    TrackingIdStatus,
     Transaction,
     VoidRequest,
     VoidResponse,
@@ -201,6 +202,15 @@ class AsyncBepaidClient:
     async def get_transaction(self, uid: str) -> Transaction:
         data = await self._request("GET", f"{self._base_gateway}/transactions/{uid}")
         return Transaction.model_validate(data["transaction"])
+
+    async def get_transaction_by_tracking_id(
+        self, tracking_id: str
+    ) -> TrackingIdStatus:
+        data = await self._request(
+            "GET",
+            f"{self._base_gateway}/v2/transactions/tracking_id/{tracking_id}",
+        )
+        return TrackingIdStatus.model_validate(data)
 
     # ── saved-card charges ─────────────────────────────────────────────────
 
@@ -553,6 +563,9 @@ class BepaidClient:
 
     def get_transaction(self, uid: str) -> Transaction:
         return self._invoke("get_transaction", uid)
+
+    def get_transaction_by_tracking_id(self, tracking_id: str) -> TrackingIdStatus:
+        return self._invoke("get_transaction_by_tracking_id", tracking_id)
 
     # ── saved-card charges ─────────────────────────────────────────────────
 
