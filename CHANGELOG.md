@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-14
+
+### Added
+
+- Split payments: `create_split_payment` (Direct API).
+- Pay-by-link products: `create_product`, `list_products`, `get_product`,
+  `update_product`.
+- Payment token for the payment page/widget: `create_payment_token`.
+- Webhook `Content-Signature` verification: `verify_webhook_signature`
+  (RSA-SHA256 over the raw body, uses `cryptography`).
+- Plan payment link: `get_plan_payment_link`.
+- Saved-card charges: `charge_saved_card` (Gateway API).
+- Recipient tokenization for payouts: `tokenize_recipient_card`.
+- Apple Pay payment: `apple_pay_payment` (Checkout API).
+- APM currency query: `get_currencies` (Direct API).
+- Transaction status by tracking id: `get_transaction_by_tracking_id`.
+
 ## [0.4.0] - 2026-09-13
 
 ### Added
@@ -59,7 +76,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Direct (APM) API: `create_apm_payment`, `apm_refund`, `apm_full_refund`.
 - Webhooks: `verify_webhook_auth` and `WebhookNotification` parsing.
 
-[Unreleased]: https://github.com/amnesiaof/bepaid-py/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/amnesiaof/bepaid-py/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/amnesiaof/bepaid-py/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/amnesiaof/bepaid-py/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/amnesiaof/bepaid-py/compare/v0.2.0...v0.2.1
