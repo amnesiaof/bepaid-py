@@ -98,6 +98,31 @@ class ThreeDSecureVerification(CamelModel):
 # ── gateway ───────────────────────────────────────────────────────────────────
 
 
+class FiscalizationTax(CamelModel):
+    id: str
+    percent: str
+    type: str
+    description: str | None = None
+    inclusive: bool
+
+
+class FiscalizationPosition(CamelModel):
+    name: str
+    type: str
+    amount: int
+    quantity: float | None = None
+    measure_unit_code: int | None = None
+    description: str | None = None
+    untaxed: bool | None = None
+    nomenclature_code: str | None = None
+    taxes: list[FiscalizationTax] | None = None
+
+
+class Fiscalization(CamelModel):
+    external_id: str
+    positions: list[FiscalizationPosition]
+
+
 class PaymentRequest(CamelModel):
     amount: str
     currency: str
@@ -112,6 +137,8 @@ class PaymentRequest(CamelModel):
     credit_card: CreditCardRaw | None = None
     customer: Customer | None = None
     additional_data: AdditionalData | None = None
+    encrypted_data: str | None = None
+    fiscalization: Fiscalization | None = None
 
 
 class PaymentResponse(CamelModel):

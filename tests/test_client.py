@@ -26,6 +26,9 @@ from bepaid.models import (
     CreateTokenRequest,
     CurrencyQueryRequest,
     CustomerRecord,
+    Fiscalization,
+    FiscalizationPosition,
+    FiscalizationTax,
     P2pRequest,
     PaymentRequest,
     PayoutAddress,
@@ -173,6 +176,79 @@ def test_create_payment_serializes_h2h_fields() -> None:
             tracking_id="tracking_id_000",
             return_url="https://example.com/return",
             verification_url="https://example.com/verify",
+        )
+    )
+
+
+def test_create_payment_serializes_fiscalization_and_encrypted_data() -> None:
+    c = client(
+        {
+            ("POST", "/transactions/payments"): {
+                "json": {"transaction": {"uid": "u1"}},
+                "expect_body": {
+                    "request": {
+                        "amount": "700",
+                        "currency": "USD",
+                        "test": True,
+                        "description": "Test transaction",
+                        "trackingId": "tid",
+                        "encryptedData": "jwe-blob",
+                        "fiscalization": {
+                            "externalId": "fisc-1",
+                            "positions": [
+                                {
+                                    "name": "Product",
+                                    "type": "service",
+                                    "amount": 100,
+                                    "quantity": 1.0,
+                                    "measureUnitCode": 796,
+                                    "description": "Desc",
+                                    "untaxed": False,
+                                    "nomenclatureCode": "code-1",
+                                    "taxes": [
+                                        {
+                                            "id": "vat-12",
+                                            "percent": "12",
+                                            "type": "vat",
+                                            "inclusive": True,
+                                        }
+                                    ],
+                                }
+                            ],
+                        },
+                    }
+                },
+            }
+        }
+    )
+    c.create_payment(
+        PaymentRequest(
+            amount="700",
+            currency="USD",
+            test=True,
+            description="Test transaction",
+            tracking_id="tid",
+            encrypted_data="jwe-blob",
+            fiscalization=Fiscalization(
+                external_id="fisc-1",
+                positions=[
+                    FiscalizationPosition(
+                        name="Product",
+                        type="service",
+                        amount=100,
+                        quantity=1.0,
+                        measure_unit_code=796,
+                        description="Desc",
+                        untaxed=False,
+                        nomenclature_code="code-1",
+                        taxes=[
+                            FiscalizationTax(
+                                id="vat-12", percent="12", type="vat", inclusive=True
+                            )
+                        ],
+                    )
+                ],
+            ),
         )
     )
 
