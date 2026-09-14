@@ -25,6 +25,8 @@ from .models import (
     ApmConfirmResponse,
     ApmPaymentRequest,
     ApmPaymentResponse,
+    ApmPayoutRequest,
+    ApmPayoutResponse,
     ApmRefundRequest,
     ApmRefundResponse,
     AuthorizationRequest,
@@ -39,6 +41,7 @@ from .models import (
     CheckoutRequest,
     CheckoutResponse,
     CheckoutStatus,
+    CheckupRequest,
     CreateTokenRequest,
     CurrencyInfo,
     CurrencyQueryRequest,
@@ -53,6 +56,8 @@ from .models import (
     Product,
     ProductCreateRequest,
     ProductUpdateRequest,
+    ProofRequest,
+    ProofResponse,
     RecipientTokenizationRequest,
     RefundRequest,
     RefundResponse,
@@ -323,6 +328,44 @@ class AsyncBepaidClient:
             req.model_dump(by_alias=True, exclude_none=True),
         )
         return ApmConfirmResponse.model_validate(data["response"])
+
+    async def get_apm_transaction(self, uid: str) -> Transaction:
+        data = await self._request("GET", f"{self._base_api}/beyag/transactions/{uid}")
+        return Transaction.model_validate(data["transaction"])
+
+    async def get_apm_transactions_by_tracking_id(
+        self, tracking_id: str
+    ) -> list[Transaction]:
+        data = await self._request(
+            "GET",
+            f"{self._base_api}/beyag/transactions/tracking_id/{tracking_id}",
+        )
+        return [Transaction.model_validate(item) for item in data["transactions"]]
+
+    async def apm_payout(self, req: ApmPayoutRequest) -> ApmPayoutResponse:
+        data = await self._request(
+            "POST",
+            f"{self._base_api}/beyag/transactions/payouts",
+            {"request": req.model_dump(by_alias=True, exclude_none=True)},
+        )
+        return ApmPayoutResponse.model_validate(data["transaction"])
+
+    async def apm_proof(self, uid: str, req: ProofRequest) -> ProofResponse:
+        data = await self._request(
+            "POST",
+            f"{self._base_api}/beyag/transactions/{uid}/proof",
+            {"request": req.model_dump(by_alias=True, exclude_none=True)},
+        )
+        return ProofResponse.model_validate(data["transaction"])
+
+    async def checkup(self, req: CheckupRequest) -> Transaction:
+        data = await self._request(
+            "POST",
+            f"{self._base_gateway}/transactions/checkups",
+            {"request": req.model_dump(by_alias=True, exclude_none=True)},
+            api_version="3",
+        )
+        return Transaction.model_validate(data["transaction"])
 
     # ── P2P transfer ───────────────────────────────────────────────────────
 
@@ -620,6 +663,21 @@ class BepaidClient:
         self, uid: str, req: ApmConfirmRequest
     ) -> ApmConfirmResponse:
         return self._invoke("confirm_apm_payment", uid, req)
+
+    def get_apm_transaction(self, uid: str) -> Transaction:
+        return self._invoke("get_apm_transaction", uid)
+
+    def get_apm_transactions_by_tracking_id(self, tracking_id: str) -> list[Transaction]:
+        return self._invoke("get_apm_transactions_by_tracking_id", tracking_id)
+
+    def apm_payout(self, req: ApmPayoutRequest) -> ApmPayoutResponse:
+        return self._invoke("apm_payout", req)
+
+    def apm_proof(self, uid: str, req: ProofRequest) -> ProofResponse:
+        return self._invoke("apm_proof", uid, req)
+
+    def checkup(self, req: CheckupRequest) -> Transaction:
+        return self._invoke("checkup", req)
 
     # ── P2P transfer ───────────────────────────────────────────────────────
 

@@ -13,6 +13,7 @@ from bepaid.errors import ApiError
 from bepaid.models import (
     ApmConfirmRequest,
     ApmPaymentRequest,
+    ApmPayoutRequest,
     ApmRefundRequest,
     AuthorizationRequest,
     BalanceRequest,
@@ -23,6 +24,7 @@ from bepaid.models import (
     CheckoutOrder,
     CheckoutOrderAdditionalData,
     CheckoutRequest,
+    CheckupRequest,
     CreateTokenRequest,
     CurrencyQueryRequest,
     CustomerRecord,
@@ -39,6 +41,8 @@ from bepaid.models import (
     PlanItem,
     ProductCreateRequest,
     ProductUpdateRequest,
+    ProofDocument,
+    ProofRequest,
     RecipientTokenizationRequest,
     RefundRequest,
     ReportCountParams,
@@ -1191,3 +1195,139 @@ def test_update_product_happy_path() -> None:
         "prd_1",
         ProductUpdateRequest(amount=950, infinite=False, quantity="5"),
     )
+
+
+def test_get_apm_transaction() -> None:
+    c = client(
+        {
+            ("GET", "/beyag/transactions/apm1"): {
+                "json": {
+                    "transaction": {
+                        "uid": "apm1",
+                        "type": "payment",
+                        "status": "successful",
+                        "amount": 100,
+                        "currency": "BYN",
+                    }
+                }
+            }
+        }
+    )
+    t = c.get_apm_transaction("apm1")
+    assert t.status == "successful"
+    assert t.amount == 100
+
+
+def test_get_apm_transactions_by_tracking_id() -> None:
+    c = client(
+        {
+            ("GET", "/beyag/transactions/tracking_id/tracking_1"): {
+                "json": {
+                    "transactions": [
+                        {"uid": "apm1", "type": "payment", "status": "successful"},
+                        {"uid": "apm2", "type": "payment", "status": "failed"},
+                    ]
+                }
+            }
+        }
+    )
+    ts = c.get_apm_transactions_by_tracking_id("tracking_1")
+    assert [t.uid for t in ts] == ["apm1", "apm2"]
+
+
+def test_apm_payout() -> None:
+    c = client(
+        {
+            ("POST", "/beyag/transactions/payouts"): {
+                "json": {
+                    "transaction": {
+                        "uid": "pay1",
+                        "type": "payout",
+                        "status": "successful",
+                        "amount": 100,
+                        "currency": "USD",
+                        "payout": {"status": "successful", "gateway_id": 85},
+                    }
+                }
+            }
+        }
+    )
+    p = c.apm_payout(
+        ApmPayoutRequest(
+            amount=100,
+            currency="USD",
+            description="payout",
+            method={"type": "ad_payments"},
+        )
+    )
+    assert p.status == "successful"
+    assert p.payout is not None
+    assert p.payout["gateway_id"] == 85
+
+
+def test_apm_proof() -> None:
+    c = client(
+        {
+            ("POST", "/beyag/transactions/apm1/proof"): {
+                "json": {
+                    "transaction": {
+                        "uid": "pr1",
+                        "parent_uid": "apm1",
+                        "type": "proof",
+                        "status": "successful",
+                        "amount": 71267,
+                        "currency": "USD",
+                        "proof": {"message": "Proof was successfully processed."},
+                    }
+                }
+            }
+        }
+    )
+    r = c.apm_proof(
+        "apm1",
+        ProofRequest(
+            amount=71267,
+            currency="USD",
+            document=ProofDocument(
+                content_type="application/pdf",
+                file_name="proof.pdf",
+                file_size=12345,
+                content="base64...",
+                checksum="sha256...",
+            ),
+        ),
+    )
+    assert r.status == "successful"
+    assert r.parent_uid == "apm1"
+    assert r.proof is not None
+    assert r.proof["message"] == "Proof was successfully processed."
+
+
+def test_checkup() -> None:
+    c = client(
+        {
+            ("POST", "/transactions/checkups"): {
+                "json": {
+                    "transaction": {
+                        "uid": "c1",
+                        "type": "payment",
+                        "status": "successful",
+                        "amount": 100,
+                        "currency": "USD",
+                        "payment_method_type": "credit_card",
+                    }
+                }
+            }
+        }
+    )
+    t = c.checkup(
+        CheckupRequest(
+            amount=100,
+            currency="USD",
+            description="checkup",
+            tracking_id="tracking_1",
+            credit_card=ChargeCreditCard(token="tok1"),
+        )
+    )
+    assert t.status == "successful"
+    assert t.amount == 100

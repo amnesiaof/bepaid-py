@@ -9,6 +9,7 @@ from bepaid import BepaidError
 from bepaid.errors import ApiError
 from bepaid.models import (
     ApmPaymentRequest,
+    ApmPayoutRequest,
     ApmRefundRequest,
     AuthorizationRequest,
     BalanceRequest,
@@ -17,6 +18,7 @@ from bepaid.models import (
     CheckoutOrder,
     CheckoutOrderAdditionalData,
     CheckoutRequest,
+    CheckupRequest,
     CurrencyQueryRequest,
     P2pRequest,
     PaymentRequest,
@@ -24,6 +26,8 @@ from bepaid.models import (
     PayoutRequest,
     ProductCreateRequest,
     ProductUpdateRequest,
+    ProofDocument,
+    ProofRequest,
     RecipientTokenizationRequest,
     ReportCountParams,
     ReportCountRequest,
@@ -514,5 +518,116 @@ async def test_async_currency_query() -> None:
         assert info.currency == "TRX"
         assert info.provider_info is not None
         assert info.provider_info["networks"][0]["name"] == "tron"
+    finally:
+        await c.aclose()
+
+
+@pytest.mark.asyncio
+async def test_async_apm_status_payout_proof_checkup() -> None:
+    c = async_client(
+        {
+            ("GET", "/beyag/transactions/apm1"): {
+                "json": {
+                    "transaction": {
+                        "uid": "apm1",
+                        "type": "payment",
+                        "status": "successful",
+                        "amount": 100,
+                        "currency": "BYN",
+                    }
+                }
+            },
+            ("GET", "/beyag/transactions/tracking_id/tracking_1"): {
+                "json": {
+                    "transactions": [
+                        {"uid": "apm1", "type": "payment", "status": "successful"},
+                        {"uid": "apm2", "type": "payment", "status": "failed"},
+                    ]
+                }
+            },
+            ("POST", "/beyag/transactions/payouts"): {
+                "json": {
+                    "transaction": {
+                        "uid": "pay1",
+                        "type": "payout",
+                        "status": "successful",
+                        "amount": 100,
+                        "currency": "USD",
+                        "payout": {"status": "successful", "gateway_id": 85},
+                    }
+                }
+            },
+            ("POST", "/beyag/transactions/apm1/proof"): {
+                "json": {
+                    "transaction": {
+                        "uid": "pr1",
+                        "parent_uid": "apm1",
+                        "type": "proof",
+                        "status": "successful",
+                        "amount": 71267,
+                        "currency": "USD",
+                        "proof": {"message": "Proof was successfully processed."},
+                    }
+                }
+            },
+            ("POST", "/transactions/checkups"): {
+                "json": {
+                    "transaction": {
+                        "uid": "c1",
+                        "type": "payment",
+                        "status": "successful",
+                        "amount": 100,
+                        "currency": "USD",
+                    }
+                }
+            },
+        }
+    )
+    try:
+        t = await c.get_apm_transaction("apm1")
+        assert t.status == "successful"
+
+        ts = await c.get_apm_transactions_by_tracking_id("tracking_1")
+        assert [x.uid for x in ts] == ["apm1", "apm2"]
+
+        p = await c.apm_payout(
+            ApmPayoutRequest(
+                amount=100,
+                currency="USD",
+                description="payout",
+                method={"type": "ad_payments"},
+            )
+        )
+        assert p.status == "successful"
+        assert p.payout is not None
+        assert p.payout["gateway_id"] == 85
+
+        r = await c.apm_proof(
+            "apm1",
+            ProofRequest(
+                amount=71267,
+                currency="USD",
+                document=ProofDocument(
+                    content_type="application/pdf",
+                    file_name="proof.pdf",
+                    file_size=12345,
+                    content="base64...",
+                    checksum="sha256...",
+                ),
+            ),
+        )
+        assert r.status == "successful"
+        assert r.parent_uid == "apm1"
+
+        cu = await c.checkup(
+            CheckupRequest(
+                amount=100,
+                currency="USD",
+                description="checkup",
+                tracking_id="tracking_1",
+                credit_card=ChargeCreditCard(token="tok1"),
+            )
+        )
+        assert cu.status == "successful"
     finally:
         await c.aclose()

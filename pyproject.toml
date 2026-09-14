@@ -1,6 +1,6 @@
 [project]
 name = "bepaid"
-version = "0.5.3"
+version = "0.5.4"
 description = "Client for the bePaid payment API (bepaid.by)"
 readme = "README.md"
 license = "MIT"

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-09-14
+
+### Added
+
+- APM transaction status queries: `get_apm_transaction` (by uid) and
+  `get_apm_transactions_by_tracking_id`.
+- APM payouts: `apm_payout` with `ApmPayoutRequest` / `ApmPayoutResponse`.
+- APM payment proof: `apm_proof` with `ProofRequest` / `ProofDocument` /
+  `ProofResponse`.
+- Card checkup (risk management rules check): `checkup` with `CheckupRequest`.
+
 ## [0.5.3] - 2026-09-14
 
 ### Added

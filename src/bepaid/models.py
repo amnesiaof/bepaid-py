@@ -451,6 +451,78 @@ class ApmConfirmResponse(CamelModel):
     currency: str | None = None
 
 
+# ── APM payout ────────────────────────────────────────────────────────────────
+
+
+class ApmPayoutRequest(CamelModel):
+    amount: int
+    currency: str
+    description: str
+    test: bool | None = None
+    tracking_id: str | None = None
+    ip: str | None = None
+    language: str | None = None
+    notification_url: str | None = None
+    verification_url: str | None = None
+    return_url: str | None = None
+    customer: Customer | None = None
+    method: dict[str, Any]
+    additional_data: dict[str, Any] | None = None
+
+
+class ApmPayoutResponse(CamelModel):
+    uid: str | None = None
+    type: str | None = None
+    status: str | None = None
+    amount: int | None = None
+    currency: str | None = None
+    description: str | None = None
+    method_type: str | None = None
+    receipt_url: str | None = None
+    message: str | None = None
+    tracking_id: str | None = None
+    test: bool | None = None
+    language: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+    paid_at: str | None = None
+    payout: dict[str, Any] | None = None
+    billing_address: dict[str, Any] | None = None
+    customer: dict[str, Any] | None = None
+    smart_routing_verification: dict[str, Any] | None = None
+    additional_data: dict[str, Any] | None = None
+
+
+# ── APM proof of payment ──────────────────────────────────────────────────────
+
+
+class ProofDocument(CamelModel):
+    content_type: str
+    file_name: str
+    file_size: int
+    content: str
+    checksum: str
+
+
+class ProofRequest(CamelModel):
+    skip_duplicate_check: bool | None = None
+    amount: int
+    currency: str
+    transaction_reference: str | None = None
+    document: ProofDocument
+
+
+class ProofResponse(CamelModel):
+    uid: str | None = None
+    parent_uid: str | None = None
+    type: str | None = None
+    status: str | None = None
+    message: str | None = None
+    amount: int | None = None
+    currency: str | None = None
+    proof: dict[str, Any] | None = None
+
+
 # ── P2P transfer ──────────────────────────────────────────────────────────────
 
 
@@ -954,6 +1026,21 @@ class ChargeRequest(BaseModel):
     credit_card: ChargeCreditCard
     customer: Customer | None = None
     additional_data: ChargeAdditionalData | None = None
+
+
+class CheckupRequest(CamelModel):
+    amount: int
+    currency: str
+    description: str
+    tracking_id: str
+    language: str | None = None
+    notification_url: str | None = None
+    verification_url: str | None = None
+    test: bool | None = None
+    credit_card: ChargeCreditCard | None = None
+    customer: Customer | None = None
+    billing_address: BillingAddress | None = None
+    additional_data: dict[str, Any] | None = None
 
 
 # ── gateway: recipient tokenization ──────────────────────────────────────────
