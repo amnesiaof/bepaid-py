@@ -667,7 +667,9 @@ class BepaidClient:
     def get_apm_transaction(self, uid: str) -> Transaction:
         return self._invoke("get_apm_transaction", uid)
 
-    def get_apm_transactions_by_tracking_id(self, tracking_id: str) -> list[Transaction]:
+    def get_apm_transactions_by_tracking_id(
+        self, tracking_id: str
+    ) -> list[Transaction]:
         return self._invoke("get_apm_transactions_by_tracking_id", tracking_id)
 
     def apm_payout(self, req: ApmPayoutRequest) -> ApmPayoutResponse:
