@@ -747,6 +747,13 @@ class SubscriptionCreateRequest(CamelModel):
     settings: dict[str, Any] | None = None
 
 
+class SubscriptionLastTransaction(CamelModel):
+    uid: str | None = None
+    status: str | None = None
+    message: str | None = None
+    created_at: str | None = None
+
+
 class Subscription(CamelModel):
     id: str | None = None
     state: str | None = None
@@ -757,8 +764,8 @@ class Subscription(CamelModel):
     active_to: str | None = None
     card: CreditCardInfo | None = None
     customer: SubscriptionCustomer | None = None
-    plan: dict[str, Any] | None = None
-    last_transaction: dict[str, Any] | None = None
+    plan: PlanItem | None = None
+    last_transaction: SubscriptionLastTransaction | None = None
     paid_billing_cycles: int | None = None
     number_failed_payment_attempts: int | None = None
     additional_data: dict[str, Any] | None = None
