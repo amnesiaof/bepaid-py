@@ -357,7 +357,7 @@ class ApmPaymentRequest(CamelModel):
     language: str | None = None
     return_url: str | None = None
     customer: Customer | None = None
-    payment_method: dict[str, Any] = Field(alias="paymentMethod")
+    payment_method: dict[str, Any]
     additional_data: dict[str, Any] | None = None
 
     @classmethod
@@ -601,7 +601,7 @@ class P2pCard(CamelModel):
 
 
 class P2pInfo(CamelModel):
-    type: str | None = Field(default=None, alias="type")
+    type: str | None = None
 
 
 class P2pAdditionalData(CamelModel):

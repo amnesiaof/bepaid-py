@@ -298,6 +298,7 @@ class AsyncBepaidClient:
             "POST",
             f"{self._base_checkout}/ctp/api/apple_pay/validate",
             {"url": url, "token": token, "context": "merchant"},
+            api_version="2",
         )
 
     # ── direct / APM API ───────────────────────────────────────────────────
