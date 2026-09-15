@@ -118,6 +118,29 @@ def test_create_payment_happy_path() -> None:
     assert resp.uid == "u1"
 
 
+def test_sync_reuses_persistent_client() -> None:
+    handlers = {
+        ("POST", "/transactions/payments"): {
+            "expect_version": "3",
+            "json": {"transaction": {"uid": "u1"}},
+        }
+    }
+    c = client(handlers)
+    c.create_payment(_payment_request())
+    c.create_payment(_payment_request())
+    assert c._async is not None
+    assert c._loop is not None
+    assert not c._loop.is_closed()
+    first = c._async
+    c.create_payment(_payment_request())
+    assert c._async is first
+    c.close()
+    assert c._loop is None
+    assert c._async is None
+    with client(handlers) as cm:
+        assert cm.create_payment(_payment_request()).uid == "u1"
+
+
 def test_create_payment_serializes_request() -> None:
     c = client(
         {

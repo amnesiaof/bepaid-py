@@ -592,9 +592,9 @@ class AsyncBepaidClient:
 class BepaidClient:
     """Synchronous wrapper around :class:`AsyncBepaidClient`.
 
-    Each call runs on a fresh event loop (via :func:`asyncio.run`), so the
-    wrapper does not reuse persistent connections. Prefer AsyncBepaidClient
-    when you are already in an asyncio application.
+    All calls share a single persistent event loop and one http client, so
+    connections are reused across calls. Call :meth:`close` to release them,
+    or use it as a context manager. Not thread-safe: use one client per thread.
     """
 
     def __init__(
@@ -617,28 +617,49 @@ class BepaidClient:
         self._base_api = base_api_url
         self._base_merchant = base_merchant_url
         self._transport = transport
-
-    def _run(self, coro: Coroutine[Any, Any, T]) -> T:
-        return asyncio.run(coro)
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._async: AsyncBepaidClient | None = None
 
     def _client(self) -> AsyncBepaidClient:
-        return AsyncBepaidClient(
-            self._shop_id,
-            self._secret_key,
-            timeout=self._timeout,
-            base_gateway_url=self._base_gateway,
-            base_checkout_url=self._base_checkout,
-            base_api_url=self._base_api,
-            base_merchant_url=self._base_merchant,
-            transport=self._transport,
-        )
+        if self._async is None:
+            self._async = AsyncBepaidClient(
+                self._shop_id,
+                self._secret_key,
+                timeout=self._timeout,
+                base_gateway_url=self._base_gateway,
+                base_checkout_url=self._base_checkout,
+                base_api_url=self._base_api,
+                base_merchant_url=self._base_merchant,
+                transport=self._transport,
+            )
+        return self._async
+
+    def _run(self, coro: Coroutine[Any, Any, T]) -> T:
+        loop = self._loop
+        if loop is None or loop.is_closed():
+            loop = self._loop = asyncio.new_event_loop()
+        return loop.run_until_complete(coro)
 
     async def _call(self, operation: str, *args: object) -> Any:
-        async with self._client() as client:
-            return await getattr(client, operation)(*args)
+        return await getattr(self._client(), operation)(*args)
 
     def _invoke(self, operation: str, *args: object) -> Any:
         return self._run(self._call(operation, *args))
+
+    def close(self) -> None:
+        if self._loop is None:
+            return
+        if self._async is not None:
+            self._loop.run_until_complete(self._async.aclose())
+        self._loop.close()
+        self._loop = None
+        self._async = None
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
 
     # ── gateway API ────────────────────────────────────────────────────────
 
