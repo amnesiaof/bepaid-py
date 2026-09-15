@@ -53,7 +53,10 @@ async def test_async_create_payment() -> None:
     c = async_client(
         {
             ("POST", "/transactions/payments"): {
-                "json": {"transaction": {"tracking_id": "tracking_id_000", "uid": "u1"}}
+                "expect_version": "3",
+                "json": {
+                    "transaction": {"tracking_id": "tracking_id_000", "uid": "u1"}
+                },
             }
         }
     )
@@ -67,6 +70,7 @@ async def test_async_api_error() -> None:
     c = async_client(
         {
             ("POST", "/transactions/payments"): {
+                "expect_version": "3",
                 "status": 400,
                 "json": {"message": "Validation failed"},
             }
@@ -83,13 +87,14 @@ async def test_async_authorization_redirect() -> None:
     c = async_client(
         {
             ("POST", "/transactions/authorizations"): {
+                "expect_version": "3",
                 "json": {
                     "transaction": {
                         "uid": "b6c446e4",
                         "status": "incomplete",
                         "redirect_url": "https://gateway.bepaid.by/process/b6c446e4",
                     }
-                }
+                },
             }
         }
     )
@@ -288,6 +293,7 @@ async def test_async_subscriptions_and_p2p() -> None:
                 }
             },
             ("POST", "/transactions/p2ps"): {
+                "expect_version": "3",
                 "json": {
                     "transaction": {
                         "uid": "p2p1",
@@ -296,6 +302,18 @@ async def test_async_subscriptions_and_p2p() -> None:
                         "amount": 100,
                         "currency": "EUR",
                     }
+                },
+            },
+            ("POST", "/p2p-restrictions"): {
+                "json": {
+                    "status": "successful",
+                    "message": "p2p is allowed",
+                    "commission": {
+                        "minimum": 0.7,
+                        "percent": 1.5,
+                        "bank_fee": 7.35,
+                        "currency": "USD",
+                    },
                 }
             },
         }
@@ -326,6 +344,19 @@ async def test_async_subscriptions_and_p2p() -> None:
         )
         assert p.status == "successful"
         assert p.type == "p2p"
+
+        v = await c.verify_p2p(
+            P2pRequest(
+                amount=100,
+                currency="USD",
+                credit_card={"number": "4012001037141112"},
+                recipient_card={"number": "4200000000000000"},
+                test=True,
+            )
+        )
+        assert v.status == "successful"
+        assert v.commission is not None
+        assert v.commission.currency == "USD"
     finally:
         await c.aclose()
 
@@ -335,6 +366,7 @@ async def test_async_payout_and_balance() -> None:
     c = async_client(
         {
             ("POST", "/transactions/payouts"): {
+                "expect_version": "3",
                 "json": {
                     "transaction": {
                         "uid": "1",
@@ -343,7 +375,7 @@ async def test_async_payout_and_balance() -> None:
                         "amount": 100,
                         "currency": "USD",
                     }
-                }
+                },
             },
             ("POST", "/beyag/balance"): {
                 "json": {
@@ -570,7 +602,43 @@ async def test_async_apm_status_payout_proof_checkup() -> None:
                     }
                 }
             },
+            ("POST", "/beyag/gateways/mts_money_widget/check_service"): {
+                "expect_version": "3",
+                "json": {
+                    "service_activated": True,
+                    "message": None,
+                    "validation": {"operator": "mts", "message": "OK"},
+                },
+            },
+            ("GET", "/beyag/payments/ep1"): {
+                "json": {
+                    "transaction": {
+                        "uid": "ep1",
+                        "status": "pending",
+                        "order_id": "633602201673",
+                    }
+                }
+            },
+            ("GET", "/beyag/payments/"): {
+                "json": {
+                    "transaction": {
+                        "uid": "ep2",
+                        "status": "pending",
+                        "order_id": "633602201673",
+                    }
+                }
+            },
+            ("DELETE", "/beyag/payments/ep1"): {
+                "json": {
+                    "transaction": {
+                        "uid": "ep1",
+                        "status": "deleted",
+                        "order_id": "633602201673",
+                    }
+                }
+            },
             ("POST", "/transactions/checkups"): {
+                "expect_version": "3",
                 "json": {
                     "transaction": {
                         "uid": "c1",
@@ -579,7 +647,7 @@ async def test_async_apm_status_payout_proof_checkup() -> None:
                         "amount": 100,
                         "currency": "USD",
                     }
-                }
+                },
             },
         }
     )
@@ -629,5 +697,17 @@ async def test_async_apm_status_payout_proof_checkup() -> None:
             )
         )
         assert cu.status == "successful"
+
+        ms = await c.check_mts_service("375295222222", test=True)
+        assert ms.service_activated is True
+        assert ms.validation is not None
+        assert ms.validation.operator == "mts"
+
+        ep = await c.get_erip_payment("ep1")
+        assert ep.status == "pending"
+        ep = await c.get_erip_payment_by_order_id("633602201673")
+        assert ep.uid == "ep2"
+        ep = await c.delete_erip_payment("ep1")
+        assert ep.status == "deleted"
     finally:
         await c.aclose()

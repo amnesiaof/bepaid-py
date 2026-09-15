@@ -41,6 +41,7 @@ from .models import (
     CheckoutRequest,
     CheckoutResponse,
     CheckoutStatus,
+    CheckServiceResponse,
     CheckupRequest,
     CreateTokenRequest,
     CurrencyInfo,
@@ -72,6 +73,7 @@ from .models import (
     TokenResponse,
     TrackingIdStatus,
     Transaction,
+    VerifyP2pResponse,
     VoidRequest,
     VoidResponse,
 )
@@ -167,6 +169,7 @@ class AsyncBepaidClient:
             "POST",
             f"{self._base_gateway}/transactions/payments",
             {"request": req.model_dump(by_alias=True, exclude_none=True)},
+            api_version="3",
         )
         return PaymentResponse.model_validate(data["transaction"])
 
@@ -177,6 +180,7 @@ class AsyncBepaidClient:
             "POST",
             f"{self._base_gateway}/transactions/authorizations",
             {"request": req.model_dump(by_alias=True, exclude_none=True)},
+            api_version="3",
         )
         return AuthorizationResponse.model_validate(data["transaction"])
 
@@ -185,6 +189,7 @@ class AsyncBepaidClient:
             "POST",
             f"{self._base_gateway}/transactions/captures",
             {"request": req.model_dump(by_alias=True, exclude_none=True)},
+            api_version="3",
         )
         return CaptureResponse.model_validate(data["transaction"])
 
@@ -193,6 +198,7 @@ class AsyncBepaidClient:
             "POST",
             f"{self._base_gateway}/transactions/voids",
             {"request": req.model_dump(by_alias=True, exclude_none=True)},
+            api_version="3",
         )
         return VoidResponse.model_validate(data["transaction"])
 
@@ -201,11 +207,14 @@ class AsyncBepaidClient:
             "POST",
             f"{self._base_gateway}/transactions/refunds",
             {"request": req.model_dump(by_alias=True, exclude_none=True)},
+            api_version="3",
         )
         return RefundResponse.model_validate(data["transaction"])
 
     async def get_transaction(self, uid: str) -> Transaction:
-        data = await self._request("GET", f"{self._base_gateway}/transactions/{uid}")
+        data = await self._request(
+            "GET", f"{self._base_gateway}/transactions/{uid}", api_version="3"
+        )
         return Transaction.model_validate(data["transaction"])
 
     async def get_transaction_by_tracking_id(
@@ -254,6 +263,7 @@ class AsyncBepaidClient:
             "POST",
             f"{self._base_gateway}/credit_cards",
             {"request": req.model_dump(by_alias=True, exclude_none=True)},
+            api_version="3",
         )
         return TokenResponse.model_validate(data)
 
@@ -358,6 +368,34 @@ class AsyncBepaidClient:
         )
         return ProofResponse.model_validate(data["transaction"])
 
+    async def check_mts_service(
+        self, phone: str, test: bool | None = None
+    ) -> CheckServiceResponse:
+        request = {"customer": {"phone": phone}}
+        if test is not None:
+            request["test"] = test
+        data = await self._request(
+            "POST",
+            f"{self._base_api}/beyag/gateways/mts_money_widget/check_service",
+            {"request": request},
+            api_version="3",
+        )
+        return CheckServiceResponse.model_validate(data)
+
+    async def get_erip_payment(self, uid: str) -> Transaction:
+        data = await self._request("GET", f"{self._base_api}/beyag/payments/{uid}")
+        return Transaction.model_validate(data["transaction"])
+
+    async def get_erip_payment_by_order_id(self, order_id: str) -> Transaction:
+        data = await self._request(
+            "GET", f"{self._base_api}/beyag/payments/?order_id={order_id}"
+        )
+        return Transaction.model_validate(data["transaction"])
+
+    async def delete_erip_payment(self, uid: str) -> Transaction:
+        data = await self._request("DELETE", f"{self._base_api}/beyag/payments/{uid}")
+        return Transaction.model_validate(data["transaction"])
+
     async def checkup(self, req: CheckupRequest) -> Transaction:
         data = await self._request(
             "POST",
@@ -374,8 +412,21 @@ class AsyncBepaidClient:
             "POST",
             f"{self._base_gateway}/transactions/p2ps",
             {"request": req.model_dump(by_alias=True, exclude_none=True)},
+            api_version="3",
         )
         return P2pResponse.model_validate(data["transaction"])
+
+    async def verify_p2p(self, req: P2pRequest) -> VerifyP2pResponse:
+        """Check whether a P2P transfer is possible and get commission details.
+
+        Response is flat (no transaction envelope).
+        """
+        data = await self._request(
+            "POST",
+            f"{self._base_gateway}/p2p-restrictions",
+            {"request": req.model_dump(by_alias=True, exclude_none=True)},
+        )
+        return VerifyP2pResponse.model_validate(data)
 
     # ── subscriptions API ──────────────────────────────────────────────────
 
@@ -442,6 +493,7 @@ class AsyncBepaidClient:
             "POST",
             f"{self._base_gateway}/transactions/payouts",
             {"request": req.model_dump(by_alias=True, exclude_none=True)},
+            api_version="3",
         )
         return PayoutResponse.model_validate(data["transaction"])
 
@@ -678,6 +730,20 @@ class BepaidClient:
     def apm_proof(self, uid: str, req: ProofRequest) -> ProofResponse:
         return self._invoke("apm_proof", uid, req)
 
+    def check_mts_service(
+        self, phone: str, *, test: bool | None = None
+    ) -> CheckServiceResponse:
+        return self._invoke("check_mts_service", phone, test)
+
+    def get_erip_payment(self, uid: str) -> Transaction:
+        return self._invoke("get_erip_payment", uid)
+
+    def get_erip_payment_by_order_id(self, order_id: str) -> Transaction:
+        return self._invoke("get_erip_payment_by_order_id", order_id)
+
+    def delete_erip_payment(self, uid: str) -> Transaction:
+        return self._invoke("delete_erip_payment", uid)
+
     def checkup(self, req: CheckupRequest) -> Transaction:
         return self._invoke("checkup", req)
 
@@ -685,6 +751,9 @@ class BepaidClient:
 
     def create_p2p(self, req: P2pRequest) -> P2pResponse:
         return self._invoke("create_p2p", req)
+
+    def verify_p2p(self, req: P2pRequest) -> VerifyP2pResponse:
+        return self._invoke("verify_p2p", req)
 
     # ── subscriptions API ──────────────────────────────────────────────────
 

@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-09-15
+
+### Added
+
+- `X-Api-Version: 3` on all gateway API calls: `create_payment`,
+  `create_authorization`, `capture`, `void`, `refund`, `get_transaction`,
+  `create_token`, `create_payout`, `create_p2p`, `checkup` (and
+  `charge_saved_card` already sent it).
+- SberPay push constructor: `ApmPaymentRequest.sberpay()` with optional
+  `phone`.
+- APM constructors: `alfaclick()`, `webpay()`, `rccard()`, `byncard()`,
+  `halva()`.
+- MTS Money service check: `check_mts_service(phone, test=None)`.
+- P2P restrictions check: `verify_p2p(req)` (`POST /p2p-restrictions`).
+- ERIP payment endpoints: `get_erip_payment`, `get_erip_payment_by_order_id`,
+  `delete_erip_payment` (only `pending`/`permanent` requirements can be
+  deleted).
+- `Transaction` fields: `id`, `order_id`, `expired_at`, `language`,
+  `version`, `erip`.
+
 ## [0.5.4] - 2026-09-14
 
 ### Added
@@ -114,7 +134,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Direct (APM) API: `create_apm_payment`, `apm_refund`, `apm_full_refund`.
 - Webhooks: `verify_webhook_auth` and `WebhookNotification` parsing.
 
-[Unreleased]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.4...HEAD
+[Unreleased]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.5...HEAD
+[0.5.5]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.1...v0.5.2

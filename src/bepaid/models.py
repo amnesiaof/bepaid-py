@@ -185,6 +185,12 @@ class Transaction(CamelModel):
     paid_at: str | None = None
     receipt_url: str | None = None
     redirect_url: str | None = None
+    id: str | None = None
+    order_id: str | None = None
+    expired_at: str | None = None
+    language: str | None = None
+    version: int | None = None
+    erip: dict[str, Any] | None = None
 
 
 class CaptureRequest(CamelModel):
@@ -392,6 +398,18 @@ class ApmPaymentRequest(CamelModel):
         )
 
     @classmethod
+    def sberpay(
+        cls, amount: int, currency: str, return_url: str, phone: str | None = None
+    ) -> ApmPaymentRequest:
+        return cls(
+            amount=amount,
+            currency=currency,
+            return_url=return_url,
+            customer=Customer(phone=phone) if phone else None,
+            payment_method={"type": "sberpay_qr_deeplink"},
+        )
+
+    @classmethod
     def qiwi_terminal(
         cls, amount: int, currency: str, account: str
     ) -> ApmPaymentRequest:
@@ -400,6 +418,34 @@ class ApmPaymentRequest(CamelModel):
             currency=currency,
             payment_method={"type": "qiwi_terminal", "account": account},
         )
+
+    @classmethod
+    def _simple(cls, type_: str, amount: int, currency: str) -> ApmPaymentRequest:
+        return cls(
+            amount=amount,
+            currency=currency,
+            payment_method={"type": type_},
+        )
+
+    @classmethod
+    def alfaclick(cls, amount: int, currency: str) -> ApmPaymentRequest:
+        return cls._simple("alfaclick", amount, currency)
+
+    @classmethod
+    def webpay(cls, amount: int, currency: str) -> ApmPaymentRequest:
+        return cls._simple("webpay", amount, currency)
+
+    @classmethod
+    def rccard(cls, amount: int, currency: str) -> ApmPaymentRequest:
+        return cls._simple("rccard", amount, currency)
+
+    @classmethod
+    def byncard(cls, amount: int, currency: str) -> ApmPaymentRequest:
+        return cls._simple("byncard", amount, currency)
+
+    @classmethod
+    def halva(cls, amount: int, currency: str) -> ApmPaymentRequest:
+        return cls._simple("halva", amount, currency)
 
 
 class ApmPaymentResponse(CamelModel):
@@ -449,6 +495,25 @@ class ApmConfirmResponse(CamelModel):
     created_at: str | None = None
     amount: int | None = None
     currency: str | None = None
+
+
+# ── MTS Money check_service ───────────────────────────────────────────────────
+
+
+class CheckServiceRequest(BaseModel):
+    test: bool | None = None
+    customer: Customer
+
+
+class CheckServiceValidation(BaseModel):
+    operator: str | None = None
+    message: str | None = None
+
+
+class CheckServiceResponse(BaseModel):
+    service_activated: bool | None = None
+    message: str | None = None
+    validation: CheckServiceValidation | None = None
 
 
 # ── APM payout ────────────────────────────────────────────────────────────────
@@ -551,6 +616,29 @@ class P2pRequest(CamelModel):
     test: bool | None = None
     tracking_id: str | None = None
     additional_data: P2pAdditionalData | None = None
+
+
+class P2pCommission(CamelModel):
+    minimum: float | None = None
+    percent: float | None = None
+    bank_fee: float | None = None
+    currency: str | None = None
+
+
+class P2pRequiredFields(CamelModel):
+    credit_card: list[str] | None = None
+    recipient_card: list[str] | None = None
+
+
+class VerifyP2pResponse(CamelModel):
+    """Flat response of `POST /p2p-restrictions`."""
+
+    status: str | None = None
+    message: str | None = None
+    commission: P2pCommission | None = None
+    test: bool | None = None
+    error_code: str | None = None
+    required_fields: P2pRequiredFields | None = None
 
 
 class P2pResponse(CamelModel):

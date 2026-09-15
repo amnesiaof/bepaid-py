@@ -107,7 +107,10 @@ def test_create_payment_happy_path() -> None:
     c = client(
         {
             ("POST", "/transactions/payments"): {
-                "json": {"transaction": {"tracking_id": "tracking_id_000", "uid": "u1"}}
+                "expect_version": "3",
+                "json": {
+                    "transaction": {"tracking_id": "tracking_id_000", "uid": "u1"}
+                },
             }
         }
     )
@@ -119,6 +122,7 @@ def test_create_payment_serializes_request() -> None:
     c = client(
         {
             ("POST", "/transactions/payments"): {
+                "expect_version": "3",
                 "json": {"transaction": {"uid": "u1"}},
                 "expect_body": {
                     "request": {
@@ -139,6 +143,7 @@ def test_api_error_raises() -> None:
     c = client(
         {
             ("POST", "/transactions/payments"): {
+                "expect_version": "3",
                 "status": 400,
                 "json": {
                     "message": "Validation failed",
@@ -157,6 +162,7 @@ def test_create_payment_serializes_h2h_fields() -> None:
     c = client(
         {
             ("POST", "/transactions/payments"): {
+                "expect_version": "3",
                 "json": {"transaction": {"uid": "u1"}},
                 "expect_body": {
                     "request": {
@@ -189,6 +195,7 @@ def test_create_payment_serializes_fiscalization_and_encrypted_data() -> None:
     c = client(
         {
             ("POST", "/transactions/payments"): {
+                "expect_version": "3",
                 "json": {"transaction": {"uid": "u1"}},
                 "expect_body": {
                     "request": {
@@ -262,6 +269,7 @@ def test_create_authorization_returns_redirect() -> None:
     c = client(
         {
             ("POST", "/transactions/authorizations"): {
+                "expect_version": "3",
                 "json": {
                     "transaction": {
                         "uid": "b6c446e4",
@@ -273,7 +281,7 @@ def test_create_authorization_returns_redirect() -> None:
                             "pa_res_url": "https://gateway.bepaid.by/process/b6c446e4",
                         },
                     }
-                }
+                },
             }
         }
     )
@@ -292,6 +300,7 @@ def test_capture_and_void() -> None:
     c = client(
         {
             ("POST", "/transactions/captures"): {
+                "expect_version": "3",
                 "json": {
                     "transaction": {
                         "uid": "c1",
@@ -299,16 +308,17 @@ def test_capture_and_void() -> None:
                         "type": "capture",
                         "parent_uid": "p1",
                     }
-                }
+                },
             },
             ("POST", "/transactions/voids"): {
+                "expect_version": "3",
                 "json": {
                     "transaction": {
                         "uid": "v1",
                         "status": "successful",
                         "type": "void",
                     }
-                }
+                },
             },
         }
     )
@@ -322,6 +332,7 @@ def test_refund() -> None:
     c = client(
         {
             ("POST", "/transactions/refunds"): {
+                "expect_version": "3",
                 "json": {
                     "transaction": {
                         "uid": "r1",
@@ -329,7 +340,7 @@ def test_refund() -> None:
                         "type": "refund",
                         "status": "successful",
                     }
-                }
+                },
             }
         }
     )
@@ -461,6 +472,7 @@ def test_create_token() -> None:
     c = client(
         {
             ("POST", "/credit_cards"): {
+                "expect_version": "3",
                 "json": {
                     "holder": "John Doe",
                     "brand": "visa",
@@ -468,7 +480,7 @@ def test_create_token() -> None:
                     "token": "7ba647e7013b5cb9df39f17c375783aef",
                     "exp_month": 1,
                     "exp_year": 2028,
-                }
+                },
             }
         }
     )
@@ -633,6 +645,81 @@ def test_apm_payment_constructors_serialize() -> None:
                 }
             },
         ),
+        (
+            ApmPaymentRequest.sberpay(
+                2200, "RUB", "https://return.example.com", "375291234567"
+            ),
+            {
+                "request": {
+                    "amount": 2200,
+                    "currency": "RUB",
+                    "returnUrl": "https://return.example.com",
+                    "customer": {"phone": "375291234567"},
+                    "paymentMethod": {"type": "sberpay_qr_deeplink"},
+                }
+            },
+        ),
+        (
+            ApmPaymentRequest.sberpay(500, "BYN", "https://ret.example.com"),
+            {
+                "request": {
+                    "amount": 500,
+                    "currency": "BYN",
+                    "returnUrl": "https://ret.example.com",
+                    "paymentMethod": {"type": "sberpay_qr_deeplink"},
+                }
+            },
+        ),
+        (
+            ApmPaymentRequest.alfaclick(120, "BYN"),
+            {
+                "request": {
+                    "amount": 120,
+                    "currency": "BYN",
+                    "paymentMethod": {"type": "alfaclick"},
+                }
+            },
+        ),
+        (
+            ApmPaymentRequest.webpay(130, "BYN"),
+            {
+                "request": {
+                    "amount": 130,
+                    "currency": "BYN",
+                    "paymentMethod": {"type": "webpay"},
+                }
+            },
+        ),
+        (
+            ApmPaymentRequest.rccard(140, "BYN"),
+            {
+                "request": {
+                    "amount": 140,
+                    "currency": "BYN",
+                    "paymentMethod": {"type": "rccard"},
+                }
+            },
+        ),
+        (
+            ApmPaymentRequest.byncard(150, "BYN"),
+            {
+                "request": {
+                    "amount": 150,
+                    "currency": "BYN",
+                    "paymentMethod": {"type": "byncard"},
+                }
+            },
+        ),
+        (
+            ApmPaymentRequest.halva(160, "BYN"),
+            {
+                "request": {
+                    "amount": 160,
+                    "currency": "BYN",
+                    "paymentMethod": {"type": "halva"},
+                }
+            },
+        ),
     ]
     for req, expected in cases:
         c = client(
@@ -760,6 +847,7 @@ def test_p2p() -> None:
     c = client(
         {
             ("POST", "/transactions/p2ps"): {
+                "expect_version": "3",
                 "json": {
                     "transaction": {
                         "uid": "1-82cc07d15d",
@@ -770,7 +858,7 @@ def test_p2p() -> None:
                         "credit_card": {"brand": "visa", "last_4": "1112"},
                         "recipient_card": {"brand": "visa", "last_4": "0000"},
                     }
-                }
+                },
             }
         }
     )
@@ -793,6 +881,38 @@ def test_p2p() -> None:
     assert resp.type == "p2p"
     assert resp.credit_card is not None
     assert resp.credit_card.brand == "visa"
+
+
+def test_verify_p2p() -> None:
+    c = client(
+        {
+            ("POST", "/p2p-restrictions"): {
+                "json": {
+                    "status": "successful",
+                    "message": "p2p is allowed",
+                    "commission": {
+                        "minimum": 0.7,
+                        "percent": 1.5,
+                        "bank_fee": 7.35,
+                        "currency": "USD",
+                    },
+                }
+            }
+        }
+    )
+    resp = c.verify_p2p(
+        P2pRequest(
+            amount=100,
+            currency="USD",
+            credit_card={"number": "4012001037141112"},
+            recipient_card={"number": "4200000000000000"},
+            test=True,
+        )
+    )
+    assert resp.status == "successful"
+    assert resp.commission is not None
+    assert resp.commission.currency == "USD"
+    assert resp.commission.percent == 1.5
 
 
 def test_customer_create_get_list() -> None:
@@ -905,6 +1025,7 @@ def test_create_payout_happy_path() -> None:
     c = client(
         {
             ("POST", "/transactions/payouts"): {
+                "expect_version": "3",
                 "json": {
                     "transaction": {
                         "uid": "1-310b0da80b",
@@ -920,7 +1041,7 @@ def test_create_payout_happy_path() -> None:
                             "email": "john@example.com",
                         },
                     }
-                }
+                },
             }
         }
     )
@@ -1303,10 +1424,75 @@ def test_apm_proof() -> None:
     assert r.proof["message"] == "Proof was successfully processed."
 
 
+def test_check_mts_service() -> None:
+    c = client(
+        {
+            ("POST", "/beyag/gateways/mts_money_widget/check_service"): {
+                "expect_version": "3",
+                "json": {
+                    "service_activated": True,
+                    "message": None,
+                    "validation": {"operator": "mts", "message": "OK"},
+                },
+            }
+        }
+    )
+    r = c.check_mts_service("375295222222", test=True)
+    assert r.service_activated is True
+    assert r.validation is not None
+    assert r.validation.operator == "mts"
+
+
+def test_erip_payments() -> None:
+    handlers = {
+        ("GET", "/beyag/payments/ep1"): {
+            "json": {
+                "transaction": {
+                    "uid": "ep1",
+                    "status": "pending",
+                    "amount": 1000,
+                    "currency": "BYN",
+                    "payment_method_type": "erip",
+                    "order_id": "633602201673",
+                    "erip": {"account_number": "123"},
+                }
+            }
+        },
+        ("GET", "/beyag/payments/"): {
+            "json": {
+                "transaction": {
+                    "uid": "ep2",
+                    "status": "pending",
+                    "order_id": "633602201673",
+                }
+            }
+        },
+        ("DELETE", "/beyag/payments/ep1"): {
+            "json": {
+                "transaction": {
+                    "uid": "ep1",
+                    "status": "deleted",
+                    "order_id": "633602201673",
+                }
+            }
+        },
+    }
+    c = client(handlers)
+    t = c.get_erip_payment("ep1")
+    assert t.uid == "ep1"
+    assert t.status == "pending"
+    assert t.erip is not None
+    t = c.get_erip_payment_by_order_id("633602201673")
+    assert t.uid == "ep2"
+    t = c.delete_erip_payment("ep1")
+    assert t.status == "deleted"
+
+
 def test_checkup() -> None:
     c = client(
         {
             ("POST", "/transactions/checkups"): {
+                "expect_version": "3",
                 "json": {
                     "transaction": {
                         "uid": "c1",
@@ -1316,7 +1502,7 @@ def test_checkup() -> None:
                         "currency": "USD",
                         "payment_method_type": "credit_card",
                     }
-                }
+                },
             }
         }
     )
