@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.6] - 2026-09-15
+
+### Fixed
+
+- `validate_apple_pay` now sends `X-API-Version: 2` as required by docs.
+
+### Changed
+
+- Removed redundant `Field(alias=...)` on `ApmPaymentRequest.payment_method`
+  and `P2pInfo.type` (implicit from `CamelModel`).
+- `Subscription.plan` changed from `dict` to `PlanItem`. Added
+  `SubscriptionLastTransaction` class for `Subscription.last_transaction`
+  (uid/status/message/created_at).
+- `BepaidClient` (sync) now reuses a single event loop and
+  `AsyncBepaidClient` across calls; connections are kept alive. Added
+  `close()` and context-manager support (`with BepaidClient(...) as c`).
+
 ## [0.5.5] - 2026-09-15
 
 ### Added
@@ -134,7 +151,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Direct (APM) API: `create_apm_payment`, `apm_refund`, `apm_full_refund`.
 - Webhooks: `verify_webhook_auth` and `WebhookNotification` parsing.
 
-[Unreleased]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.5...HEAD
+[Unreleased]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.6...HEAD
+[0.5.6]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.5...v0.5.6
 [0.5.5]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.2...v0.5.3
