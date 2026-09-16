@@ -8,7 +8,12 @@ import httpx
 import pytest
 
 from bepaid import AsyncBepaidClient, BepaidClient, BepaidError
-from bepaid.client import parse_webhook, parse_subscription_webhook, verify_webhook_auth, verify_webhook_signature
+from bepaid.client import (
+    parse_subscription_webhook,
+    parse_webhook,
+    verify_webhook_auth,
+    verify_webhook_signature,
+)
 from bepaid.errors import ApiError
 from bepaid.models import (
     ApmConfirmRequest,
@@ -888,9 +893,7 @@ def test_parse_webhook() -> None:
 
 
 def test_parse_subscription_webhook() -> None:
-    subscription = parse_subscription_webhook(
-        '{"state":"active","currency":"USD"}'
-    )
+    subscription = parse_subscription_webhook('{"state":"active","currency":"USD"}')
     assert subscription.state == "active"
 
 
