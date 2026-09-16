@@ -511,6 +511,7 @@ class ApmRefundResponse(CamelModel):
 
 
 class ApmConfirmRequest(CamelModel):
+    confirm_type: str | None = None
     skip_duplicate_check: bool | None = None
     transaction_reference: str
 
