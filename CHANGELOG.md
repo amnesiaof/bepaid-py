@@ -5,7 +5,7 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.5.10] - 2026-09-16
 
 ### Added
 - `CheckoutSettings` fields: `agreed`, `agreement_toggle`, `customer_fields`, `credit_card_fields`, `verification_url`, `auto_return`, `card_notification_url`, `save_card_toggle`, `another_card_toggle`.
