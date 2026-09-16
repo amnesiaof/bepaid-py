@@ -1,15 +1,14 @@
-"""Pydantic models for the bePaid API (aliases use camelCase as the API expects)."""
+"""Pydantic models for the bePaid API (bodies are serialized as snake_case)."""
 
 from __future__ import annotations
 
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
-from pydantic.alias_generators import to_camel
 
 
 class CamelModel(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class BillingAddress(CamelModel):
@@ -362,16 +361,24 @@ class ApmPaymentRequest(CamelModel):
 
     @classmethod
     def erip(
-        cls, amount: int, currency: str, account_number: str, service_no: str
+        cls,
+        amount: int,
+        currency: str,
+        account_number: str,
+        service_no: str,
+        erip_devices: list[EripDevice] | None = None,
     ) -> ApmPaymentRequest:
+        payment_method: dict[str, Any] = {
+            "type": "erip",
+            "account_number": account_number,
+            "service_no": service_no,
+        }
+        if erip_devices:
+            payment_method["erip_devices"] = [d.model_dump() for d in erip_devices]
         return cls(
             amount=amount,
             currency=currency,
-            payment_method={
-                "type": "erip",
-                "account_number": account_number,
-                "service_no": service_no,
-            },
+            payment_method=payment_method,
         )
 
     @classmethod

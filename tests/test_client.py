@@ -153,7 +153,7 @@ def test_create_payment_serializes_request() -> None:
                         "currency": "USD",
                         "test": True,
                         "description": "Test transaction",
-                        "trackingId": "tracking_id_000",
+                        "tracking_id": "tracking_id_000",
                     }
                 },
             }
@@ -193,9 +193,9 @@ def test_create_payment_serializes_h2h_fields() -> None:
                         "currency": "USD",
                         "test": True,
                         "description": "Test transaction",
-                        "trackingId": "tracking_id_000",
-                        "returnUrl": "https://example.com/return",
-                        "verificationUrl": "https://example.com/verify",
+                        "tracking_id": "tracking_id_000",
+                        "return_url": "https://example.com/return",
+                        "verification_url": "https://example.com/verify",
                     }
                 },
             }
@@ -226,20 +226,20 @@ def test_create_payment_serializes_fiscalization_and_encrypted_data() -> None:
                         "currency": "USD",
                         "test": True,
                         "description": "Test transaction",
-                        "trackingId": "tid",
-                        "encryptedData": "jwe-blob",
+                        "tracking_id": "tid",
+                        "encrypted_data": "jwe-blob",
                         "fiscalization": {
-                            "externalId": "fisc-1",
+                            "external_id": "fisc-1",
                             "positions": [
                                 {
                                     "name": "Product",
                                     "type": "service",
                                     "amount": 100,
                                     "quantity": 1.0,
-                                    "measureUnitCode": 796,
+                                    "measure_unit_code": 796,
                                     "description": "Desc",
                                     "untaxed": False,
-                                    "nomenclatureCode": "code-1",
+                                    "nomenclature_code": "code-1",
                                     "taxes": [
                                         {
                                             "id": "vat-12",
@@ -622,7 +622,7 @@ def test_apm_payment_constructors_serialize() -> None:
                 "request": {
                     "amount": 1000,
                     "currency": "BYN",
-                    "paymentMethod": {
+                    "payment_method": {
                         "type": "erip",
                         "account_number": "123",
                         "service_no": "99999999",
@@ -637,7 +637,7 @@ def test_apm_payment_constructors_serialize() -> None:
                     "amount": 100,
                     "currency": "BYN",
                     "customer": {"phone": "375295222222"},
-                    "paymentMethod": {
+                    "payment_method": {
                         "type": "mts_money",
                         "confirm_agreement": "accept",
                     },
@@ -650,8 +650,8 @@ def test_apm_payment_constructors_serialize() -> None:
                 "request": {
                     "amount": 220,
                     "currency": "BYN",
-                    "returnUrl": "https://example.com/return",
-                    "paymentMethod": {"type": "krok"},
+                    "return_url": "https://example.com/return",
+                    "payment_method": {"type": "krok"},
                 }
             },
         ),
@@ -661,7 +661,7 @@ def test_apm_payment_constructors_serialize() -> None:
                 "request": {
                     "amount": 1000,
                     "currency": "RUB",
-                    "paymentMethod": {
+                    "payment_method": {
                         "type": "qiwi_terminal",
                         "account": "test_account_123",
                     },
@@ -676,9 +676,9 @@ def test_apm_payment_constructors_serialize() -> None:
                 "request": {
                     "amount": 2200,
                     "currency": "RUB",
-                    "returnUrl": "https://return.example.com",
+                    "return_url": "https://return.example.com",
                     "customer": {"phone": "375291234567"},
-                    "paymentMethod": {"type": "sberpay_qr_deeplink"},
+                    "payment_method": {"type": "sberpay_qr_deeplink"},
                 }
             },
         ),
@@ -688,8 +688,8 @@ def test_apm_payment_constructors_serialize() -> None:
                 "request": {
                     "amount": 500,
                     "currency": "BYN",
-                    "returnUrl": "https://ret.example.com",
-                    "paymentMethod": {"type": "sberpay_qr_deeplink"},
+                    "return_url": "https://ret.example.com",
+                    "payment_method": {"type": "sberpay_qr_deeplink"},
                 }
             },
         ),
@@ -699,7 +699,7 @@ def test_apm_payment_constructors_serialize() -> None:
                 "request": {
                     "amount": 120,
                     "currency": "BYN",
-                    "paymentMethod": {"type": "alfaclick"},
+                    "payment_method": {"type": "alfaclick"},
                 }
             },
         ),
@@ -709,7 +709,7 @@ def test_apm_payment_constructors_serialize() -> None:
                 "request": {
                     "amount": 130,
                     "currency": "BYN",
-                    "paymentMethod": {"type": "webpay"},
+                    "payment_method": {"type": "webpay"},
                 }
             },
         ),
@@ -719,7 +719,7 @@ def test_apm_payment_constructors_serialize() -> None:
                 "request": {
                     "amount": 140,
                     "currency": "BYN",
-                    "paymentMethod": {"type": "rccard"},
+                    "payment_method": {"type": "rccard"},
                 }
             },
         ),
@@ -729,7 +729,7 @@ def test_apm_payment_constructors_serialize() -> None:
                 "request": {
                     "amount": 150,
                     "currency": "BYN",
-                    "paymentMethod": {"type": "byncard"},
+                    "payment_method": {"type": "byncard"},
                 }
             },
         ),
@@ -739,7 +739,7 @@ def test_apm_payment_constructors_serialize() -> None:
                 "request": {
                     "amount": 160,
                     "currency": "BYN",
-                    "paymentMethod": {"type": "halva"},
+                    "payment_method": {"type": "halva"},
                 }
             },
         ),
@@ -756,8 +756,7 @@ def test_apm_payment_constructors_serialize() -> None:
         p = c.create_apm_payment(req)
         assert p.status == "pending"
 
-    req = ApmPaymentRequest.erip(1000, "BYN", "123", "99999999")
-    req.payment_method["erip_devices"] = [device.model_dump()]
+    req = ApmPaymentRequest.erip(1000, "BYN", "123", "99999999", erip_devices=[device])
     c = client(
         {
             ("POST", "/beyag/transactions/payments"): {
@@ -765,7 +764,7 @@ def test_apm_payment_constructors_serialize() -> None:
                     "request": {
                         "amount": 1000,
                         "currency": "BYN",
-                        "paymentMethod": {
+                        "payment_method": {
                             "type": "erip",
                             "account_number": "123",
                             "service_no": "99999999",

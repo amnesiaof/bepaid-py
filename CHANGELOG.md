@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.7] - 2026-09-15
+
+### Fixed
+
+- Request bodies are now serialized as **snake_case** to match the bePaid
+  API. Previously `CamelModel` applied a `to_camel` alias generator, so
+  every request went out as camelCase (`trackingId`, `paymentMethod`, ...)
+  while the API (Postman collection, API v3 spec, changelog) expects
+  snake_case (`tracking_id`, `payment_method`, ...). The Rust SDK already
+  did this; Python now sends the same wire format.
+- `ApmPaymentRequest.erip()` gained an optional `erip_devices` argument to
+  pass `EripDevice` list directly.
+
+### Changed
+
+- `CamelModel` no longer renames fields to camelCase; it keeps
+  `populate_by_name=True` so camelCase input is still accepted.
+
 ## [0.5.6] - 2026-09-15
 
 ### Fixed
