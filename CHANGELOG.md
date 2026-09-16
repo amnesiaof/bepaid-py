@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.8] - 2026-09-16
+
+### Added
+
+- `custom_fields` support (bePaid API change of 2026-04-22): new
+  `CustomField` and `CustomFields` models. `custom_fields` field added to
+  `PaymentRequest`, `AuthorizationRequest`, `CheckoutOrder`,
+  `ApmPaymentRequest`, `ApmPayoutRequest`, `PayoutRequest` and the response
+  models `Transaction`, `ApmPaymentResponse`, `ApmPayoutResponse`,
+  `PayoutResponse`.
+
 ## [0.5.7] - 2026-09-15
 
 ### Fixed
