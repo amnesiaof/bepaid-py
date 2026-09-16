@@ -28,6 +28,8 @@ from bepaid.models import (
     CreateTokenRequest,
     CurrencyQueryRequest,
     CustomerRecord,
+    CustomField,
+    CustomFields,
     EripDevice,
     Fiscalization,
     FiscalizationPosition,
@@ -283,6 +285,63 @@ def test_create_payment_serializes_fiscalization_and_encrypted_data() -> None:
                         ],
                     )
                 ],
+            ),
+        )
+    )
+
+
+def test_create_payment_serializes_custom_fields() -> None:
+    c = client(
+        {
+            ("POST", "/transactions/payments"): {
+                "expect_version": "3",
+                "json": {"transaction": {"uid": "u1"}},
+                "expect_body": {
+                    "request": {
+                        "amount": "700",
+                        "currency": "USD",
+                        "test": True,
+                        "description": "Test transaction",
+                        "tracking_id": "tid",
+                        "custom_fields": {
+                            "custom_field_1": {
+                                "label": "Email",
+                                "value": "john@example.com",
+                                "visible": True,
+                                "required": True,
+                            },
+                            "custom_field_2": {
+                                "label": "Agreement number",
+                                "value": "12349",
+                                "read_only": True,
+                                "visible": True,
+                            },
+                        },
+                    }
+                },
+            }
+        }
+    )
+    c.create_payment(
+        PaymentRequest(
+            amount="700",
+            currency="USD",
+            test=True,
+            description="Test transaction",
+            tracking_id="tid",
+            custom_fields=CustomFields(
+                custom_field_1=CustomField(
+                    label="Email",
+                    value="john@example.com",
+                    visible=True,
+                    required=True,
+                ),
+                custom_field_2=CustomField(
+                    label="Agreement number",
+                    value="12349",
+                    read_only=True,
+                    visible=True,
+                ),
             ),
         )
     )

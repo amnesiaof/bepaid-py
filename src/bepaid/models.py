@@ -123,6 +123,21 @@ class Fiscalization(CamelModel):
     positions: list[FiscalizationPosition]
 
 
+class CustomField(BaseModel):
+    label: str | None = None
+    value: str | None = None
+    placeholder: str | None = None
+    visible: bool | None = None
+    required: bool | None = None
+    read_only: bool | None = None
+
+
+class CustomFields(BaseModel):
+    custom_field_1: CustomField | None = None
+    custom_field_2: CustomField | None = None
+    custom_field_3: CustomField | None = None
+
+
 class PaymentRequest(CamelModel):
     amount: str
     currency: str
@@ -139,6 +154,7 @@ class PaymentRequest(CamelModel):
     additional_data: AdditionalData | None = None
     encrypted_data: str | None = None
     fiscalization: Fiscalization | None = None
+    custom_fields: CustomFields | None = None
 
 
 class PaymentResponse(CamelModel):
@@ -156,6 +172,7 @@ class AuthorizationRequest(CamelModel):
     credit_card: CreditCardRaw | None = None
     customer: Customer | None = None
     billing_address: BillingAddress | None = None
+    custom_fields: CustomFields | None = None
 
 
 class AuthorizationResponse(CamelModel):
@@ -190,6 +207,7 @@ class Transaction(CamelModel):
     language: str | None = None
     version: int | None = None
     erip: dict[str, Any] | None = None
+    custom_fields: CustomFields | None = None
 
 
 class CaptureRequest(CamelModel):
@@ -302,6 +320,7 @@ class CheckoutOrder(BaseModel):
     description: str | None = None
     tracking_id: str | None = None
     additional_data: CheckoutOrderAdditionalData | None = None
+    custom_fields: CustomFields | None = None
 
 
 class CheckoutRequest(BaseModel):
@@ -358,6 +377,7 @@ class ApmPaymentRequest(CamelModel):
     customer: Customer | None = None
     payment_method: dict[str, Any]
     additional_data: dict[str, Any] | None = None
+    custom_fields: CustomFields | None = None
 
     @classmethod
     def erip(
@@ -468,6 +488,7 @@ class ApmPaymentResponse(CamelModel):
     receipt_url: str | None = None
     payment: PaymentInfo | None = None
     created_at: str | None = None
+    custom_fields: CustomFields | None = None
 
 
 class ApmRefundRequest(CamelModel):
@@ -540,6 +561,7 @@ class ApmPayoutRequest(CamelModel):
     customer: Customer | None = None
     method: dict[str, Any]
     additional_data: dict[str, Any] | None = None
+    custom_fields: CustomFields | None = None
 
 
 class ApmPayoutResponse(CamelModel):
@@ -563,6 +585,7 @@ class ApmPayoutResponse(CamelModel):
     customer: dict[str, Any] | None = None
     smart_routing_verification: dict[str, Any] | None = None
     additional_data: dict[str, Any] | None = None
+    custom_fields: CustomFields | None = None
 
 
 # ── APM proof of payment ──────────────────────────────────────────────────────
@@ -863,6 +886,7 @@ class PayoutRequest(BaseModel):
     sender_billing_address: PayoutAddress
     recipient_credit_card: PayoutCreditCard | None = None
     additional_data: PayoutAdditionalData | None = None
+    custom_fields: CustomFields | None = None
 
 
 class Payout(CamelModel):
@@ -890,6 +914,7 @@ class PayoutResponse(CamelModel):
     payout: Payout | None = None
     customer: Customer | None = None
     billing_address: BillingAddress | None = None
+    custom_fields: CustomFields | None = None
 
 
 # ── APM balance query ─────────────────────────────────────────────────────────
