@@ -8,7 +8,7 @@ import httpx
 import pytest
 
 from bepaid import AsyncBepaidClient, BepaidClient, BepaidError
-from bepaid.client import verify_webhook_auth, verify_webhook_signature
+from bepaid.client import parse_webhook, parse_subscription_webhook, verify_webhook_auth, verify_webhook_signature
 from bepaid.errors import ApiError
 from bepaid.models import (
     ApmConfirmRequest,
@@ -879,6 +879,19 @@ def test_verify_webhook_signature() -> None:
 
     assert verify_webhook_signature(public_key_pem, signature, body) is True
     assert verify_webhook_signature(public_key_pem, signature, b"tampered") is False
+
+
+def test_parse_webhook() -> None:
+    notification = parse_webhook('{"transaction":{"uid":"123","status":"successful"}}')
+    assert notification.transaction.uid == "123"
+    assert notification.transaction.status == "successful"
+
+
+def test_parse_subscription_webhook() -> None:
+    subscription = parse_subscription_webhook(
+        '{"state":"active","currency":"USD"}'
+    )
+    assert subscription.state == "active"
 
 
 def test_get_plan_payment_link() -> None:

@@ -76,6 +76,7 @@ from .models import (
     VerifyP2pResponse,
     VoidRequest,
     VoidResponse,
+    WebhookNotification,
 )
 
 T = TypeVar("T")
@@ -105,8 +106,7 @@ class AsyncBepaidClient:
         base_merchant_url: str = DEFAULT_MERCHANT_URL,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
-        credentials = f"{shop_id}:{secret_key}"
-        self._auth = "Basic " + base64.b64encode(credentials.encode()).decode()
+        self._auth = _basic_auth_header(str(shop_id), secret_key)
         self._base_gateway = base_gateway_url
         self._base_checkout = base_checkout_url
         self._base_api = base_api_url
@@ -862,11 +862,25 @@ class BepaidClient:
 # ── webhook helpers ──────────────────────────────────────────────────────────
 
 
+def _basic_auth_header(shop_id: str, secret_key: str) -> str:
+    return "Basic " + base64.b64encode(f"{shop_id}:{secret_key}".encode()).decode()
+
+
 def verify_webhook_auth(
     authorization_header: str, shop_id: str, secret_key: str
 ) -> bool:
-    expected = "Basic " + base64.b64encode(f"{shop_id}:{secret_key}".encode()).decode()
-    return authorization_header == expected
+    return authorization_header == _basic_auth_header(str(shop_id), secret_key)
+
+
+def parse_webhook(body: str) -> WebhookNotification:
+    """Parse a webhook payload into a typed notification."""
+    return WebhookNotification.model_validate_json(body)
+
+
+def parse_subscription_webhook(body: str) -> Subscription:
+    """Parse a subscription-service webhook payload (``event``, e.g.
+    ``created.subscription``)."""
+    return Subscription.model_validate_json(body)
 
 
 def verify_webhook_signature(
