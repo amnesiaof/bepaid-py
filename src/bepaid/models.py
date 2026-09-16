@@ -31,6 +31,8 @@ class Customer(CamelModel):
     device_id: str | None = None
     birth_date: str | None = None
     phone: str | None = None
+    external_id: str | None = None
+    taxpayer_id: str | None = None
 
 
 class BrowserInfo(CamelModel):
@@ -290,6 +292,33 @@ class TokenResponse(CamelModel):
 # ── checkout API ──────────────────────────────────────────────────────────────
 
 
+class AgreementToggle(BaseModel):
+    value: bool | None = None
+    url: str | None = None
+    text: str | None = None
+
+
+class CheckoutCustomerFields(BaseModel):
+    read_only: list[str] | None = None
+    visible: list[str] | None = None
+
+
+class CreditCardFields(BaseModel):
+    holder: str | None = None
+    read_only: list[str] | None = None
+
+
+class SaveCardToggle(BaseModel):
+    display: bool | None = None
+    customer_contract: bool | None = None
+    text: str | None = None
+    hint: str | None = None
+
+
+class AnotherCardToggle(BaseModel):
+    display: bool | None = None
+
+
 class CheckoutSettings(BaseModel):
     return_url: str | None = None
     success_url: str | None = None
@@ -300,10 +329,21 @@ class CheckoutSettings(BaseModel):
     button_next_text: str | None = None
     auto_pay: bool | None = None
     language: str | None = None
+    agreed: bool | None = None
+    agreement_toggle: AgreementToggle | None = None
+    customer_fields: CheckoutCustomerFields | None = None
+    credit_card_fields: CreditCardFields | None = None
+    verification_url: str | None = None
+    auto_return: str | None = None
+    card_notification_url: str | None = None
+    save_card_toggle: SaveCardToggle | None = None
+    another_card_toggle: AnotherCardToggle | None = None
 
 
 class PaymentMethod(BaseModel):
     types: list[str] | None = None
+    excluded_types: list[str] | None = None
+    excluded_brands: list[str] | None = None
 
 
 class CheckoutCreditCard(BaseModel):
@@ -319,6 +359,7 @@ class CheckoutOrder(BaseModel):
     amount: int
     description: str | None = None
     tracking_id: str | None = None
+    expired_at: str | None = None
     additional_data: CheckoutOrderAdditionalData | None = None
     custom_fields: CustomFields | None = None
 
