@@ -33,6 +33,11 @@ class Customer(CamelModel):
     phone: str | None = None
     external_id: str | None = None
     taxpayer_id: str | None = None
+    address: str | None = None
+    country: str | None = None
+    city: str | None = None
+    state: str | None = None
+    zip: str | None = None
 
 
 class BrowserInfo(CamelModel):
@@ -63,6 +68,8 @@ class CreditCardRaw(CamelModel):
     exp_year: int | None = None
     save_card: bool | None = None
     token: str | None = None
+    skip_three_d_secure_verification: bool | None = None
+    force_three_d_secure_verification: bool | None = None
 
 
 class CreditCardInfo(CamelModel):
@@ -72,8 +79,13 @@ class CreditCardInfo(CamelModel):
     last_4: str | None = None
     first_1: str | None = None
     bin: str | None = None
+    bin_8: str | None = None
+    issuer_country: str | None = None
+    issuer_name: str | None = None
+    product: str | None = None
     exp_month: int | None = None
     exp_year: int | None = None
+    token_provider: str | None = None
     token: str | None = None
 
 
@@ -150,6 +162,7 @@ class PaymentRequest(CamelModel):
     notification_url: str | None = None
     verification_url: str | None = None
     return_url: str | None = None
+    duplicate_check: bool | None = None
     billing_address: BillingAddress | None = None
     credit_card: CreditCardRaw | None = None
     customer: Customer | None = None
@@ -171,9 +184,11 @@ class AuthorizationRequest(CamelModel):
     tracking_id: str
     payment_method_type: str | None = None
     test: bool | None = None
+    duplicate_check: bool | None = None
     credit_card: CreditCardRaw | None = None
     customer: Customer | None = None
     billing_address: BillingAddress | None = None
+    verification_url: str | None = None
     custom_fields: CustomFields | None = None
 
 
@@ -210,6 +225,46 @@ class Transaction(CamelModel):
     version: int | None = None
     erip: dict[str, Any] | None = None
     custom_fields: CustomFields | None = None
+    tokenization: dict[str, Any] | None = None
+    closed_at: str | None = None
+    settled_at: str | None = None
+    manually_corrected_at: str | None = None
+    psp_settled_at: str | None = None
+    recurring_type: str | None = None
+    status_code: int | None = None
+    payment_method_type: str | None = None
+    parent_uid: str | None = None
+    reason: str | None = None
+    customer: Customer | None = None
+    smart_routing_verification: dict[str, Any] | None = None
+    three_d_secure_verification: dict[str, Any] | None = None
+    additional_data: dict[str, Any] | None = None
+    avs_cvc_verification: dict[str, Any] | None = None
+    errors: dict[str, Any] | None = None
+
+
+class ThreeDSecureAdvanced(CamelModel):
+    advanced: bool | None = None
+
+
+class TokenizationRequest(CamelModel):
+    amount: int
+    currency: str
+    description: str
+    tracking_id: str | None = None
+    duplicate_check: bool | None = None
+    dynamic_billing_descriptor: str | None = None
+    language: str | None = None
+    notification_url: str | None = None
+    verification_url: str | None = None
+    return_url: str | None = None
+    test: bool | None = None
+    billing_address: BillingAddress | None = None
+    credit_card: CreditCardRaw | None = None
+    three_d_secure: ThreeDSecureAdvanced | None = None
+    travel: dict[str, Any] | None = None
+    customer: Customer | None = None
+    additional_data: AdditionalData | None = None
 
 
 class CaptureRequest(CamelModel):
@@ -301,6 +356,7 @@ class AgreementToggle(BaseModel):
 class CheckoutCustomerFields(BaseModel):
     read_only: list[str] | None = None
     visible: list[str] | None = None
+    hidden: list[str] | None = None
 
 
 class CreditCardFields(BaseModel):
@@ -388,6 +444,14 @@ class CheckoutStatus(CamelModel):
     gateway_response: dict[str, Any] | None = None
     order: dict[str, Any] | None = None
     settings: CheckoutSettings | None = None
+    customer: dict[str, Any] | None = None
+    finished: bool | None = None
+    expired: bool | None = None
+    shop: dict[str, Any] | None = None
+    test: bool | None = None
+    status: str | None = None
+    message: str | None = None
+    payment_method: dict[str, Any] | None = None
 
 
 # ── direct / APM API ──────────────────────────────────────────────────────────

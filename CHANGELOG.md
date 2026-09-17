@@ -5,6 +5,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.12] - 2026-09-17
+
+### Added
+- `request_id` optional argument on host-to-host methods (`create_payment`, `create_authorization`, `capture`, `void`, `refund`, `charge_saved_card`, `create_payout`, `create_apm_payment`, `apm_refund`, `apm_full_refund`, `confirm_apm_payment`, `apm_payout`, `apm_proof`, `checkup`) to set the `RequestID` header and make requests idempotent (per bePaid idempotent requests docs).
+- `AuthorizationRequest.verification_url` field to enable transaction verification.
+- `parse_checkout_webhook()` to parse flat payment-widget webhook payloads (e.g. token-expiry notices) into `CheckoutStatus`.
+- `CheckoutStatus` fields: `customer`, `finished`, `expired`, `shop`, `test`, `status`, `message`, `payment_method`.
+- `CheckoutCustomerFields.hidden` array.
+- `create_tokenization()` method (H2H, async + sync): tokenize a card via the `POST /transactions/tokenizations` endpoint (3-D Secure supported). New `TokenizationRequest` and `ThreeDSecureAdvanced` models; `Transaction.tokenization` dict; `CreditCardRaw.skip_three_d_secure_verification` and `force_three_d_secure_verification` fields.
+- `PaymentRequest.duplicate_check` and `AuthorizationRequest.duplicate_check` fields (set `false` to allow a repeat request within 30 seconds instead of getting a `Duplicate transaction` error).
+- `Transaction` now exposes the full v3 response format: `psp_settled_at`, `status_code` (int), `payment_method_type`, `parent_uid`, `reason`, `errors`, `customer`, `smart_routing_verification`, `three_d_secure_verification`, `additional_data`, `avs_cvc_verification`. `CreditCardInfo` gains `bin_8`, `issuer_country`, `issuer_name`, `product`, `token_provider`. `Customer` gains `address`, `country`, `city`, `state`, `zip`.
+
 ## [0.5.11] - 2026-09-16
 
 ### Added

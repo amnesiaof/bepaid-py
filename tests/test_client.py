@@ -9,6 +9,7 @@ import pytest
 
 from bepaid import AsyncBepaidClient, BepaidClient, BepaidError
 from bepaid.client import (
+    parse_checkout_webhook,
     parse_subscription_webhook,
     parse_webhook,
     verify_webhook_auth,
@@ -31,6 +32,7 @@ from bepaid.models import (
     CheckoutRequest,
     CheckupRequest,
     CreateTokenRequest,
+    CreditCardRaw,
     CurrencyQueryRequest,
     CustomerRecord,
     CustomField,
@@ -60,6 +62,7 @@ from bepaid.models import (
     SplitCreditCard,
     SplitPaymentRequest,
     SubscriptionCreateRequest,
+    TokenizationRequest,
     VoidRequest,
 )
 
@@ -82,6 +85,10 @@ class MockTransport(httpx.MockTransport):
         if "expect_version" in spec:
             assert request.headers.get("x-api-version") == spec["expect_version"], (
                 "bad api version"
+            )
+        if "expect_request_id" in spec:
+            assert request.headers.get("requestid") == spec["expect_request_id"], (
+                "bad request id"
             )
         if "expect_body" in spec:
             assert json.loads(request.content) == spec["expect_body"]
@@ -107,6 +114,7 @@ def _payment_request() -> PaymentRequest:
         test=True,
         description="Test transaction",
         tracking_id="tracking_id_000",
+        duplicate_check=False,
     )
 
 
@@ -122,6 +130,20 @@ def test_create_payment_happy_path() -> None:
         }
     )
     resp = c.create_payment(_payment_request())
+    assert resp.uid == "u1"
+
+
+def test_create_payment_sends_request_id() -> None:
+    c = client(
+        {
+            ("POST", "/transactions/payments"): {
+                "expect_version": "3",
+                "expect_request_id": "uuid-request-1",
+                "json": {"transaction": {"tracking_id": "t1", "uid": "u1"}},
+            }
+        }
+    )
+    resp = c.create_payment(_payment_request(), request_id="uuid-request-1")
     assert resp.uid == "u1"
 
 
@@ -161,6 +183,7 @@ def test_create_payment_serializes_request() -> None:
                         "test": True,
                         "description": "Test transaction",
                         "tracking_id": "tracking_id_000",
+                        "duplicate_check": False,
                     }
                 },
             }
@@ -357,6 +380,15 @@ def test_create_authorization_returns_redirect() -> None:
         {
             ("POST", "/transactions/authorizations"): {
                 "expect_version": "3",
+                "expect_body": {
+                    "request": {
+                        "amount": 100,
+                        "currency": "USD",
+                        "description": "Test",
+                        "tracking_id": "x",
+                        "duplicate_check": False,
+                    }
+                },
                 "json": {
                     "transaction": {
                         "uid": "b6c446e4",
@@ -374,7 +406,11 @@ def test_create_authorization_returns_redirect() -> None:
     )
     resp = c.create_authorization(
         AuthorizationRequest(
-            amount=100, currency="USD", description="Test", tracking_id="x"
+            amount=100,
+            currency="USD",
+            description="Test",
+            tracking_id="x",
+            duplicate_check=False,
         )
     )
     assert resp.status == "incomplete"
@@ -581,6 +617,53 @@ def test_create_token() -> None:
         )
     )
     assert t.brand == "visa"
+
+
+def test_create_tokenization() -> None:
+    c = client(
+        {
+            ("POST", "/transactions/tokenizations"): {
+                "expect_version": "3",
+                "json": {
+                    "transaction": {
+                        "uid": "e89abc1a-1d18-4d0f-83a1-7009b333dce0",
+                        "status": "successful",
+                        "type": "tokenization",
+                        "credit_card": {
+                            "brand": "visa",
+                            "last_4": "1097",
+                            "token": "e3ba5977-8705-4496-bf90-a6a93d3d31cc",
+                        },
+                        "tokenization": {
+                            "gateway_id": 3483,
+                            "status": "successful",
+                        },
+                    }
+                },
+            }
+        }
+    )
+    t = c.create_tokenization(
+        TokenizationRequest(
+            amount=100,
+            currency="USD",
+            description="Test transaction",
+            test=True,
+            credit_card=CreditCardRaw(
+                number="4200000000000000",
+                verification_value="123",
+                holder="John Doe",
+                exp_month=5,
+                exp_year=2028,
+            ),
+        )
+    )
+    assert t.uid == "e89abc1a-1d18-4d0f-83a1-7009b333dce0"
+    assert (
+        t.credit_card is not None
+        and t.credit_card.token == "e3ba5977-8705-4496-bf90-a6a93d3d31cc"
+    )
+    assert t.tokenization is not None and t.tokenization["status"] == "successful"
 
 
 def test_checkout_create_and_status() -> None:
@@ -895,6 +978,18 @@ def test_parse_webhook() -> None:
 def test_parse_subscription_webhook() -> None:
     subscription = parse_subscription_webhook('{"state":"active","currency":"USD"}')
     assert subscription.state == "active"
+
+
+def test_parse_checkout_webhook() -> None:
+    status = parse_checkout_webhook(
+        '{"token":"tok123","status":"error","expired":true,"finished":false,'
+        '"message":"Token is expired.","shop_id":363}'
+    )
+    assert status.token == "tok123"
+    assert status.status == "error"
+    assert status.expired is True
+    assert status.finished is False
+    assert status.message == "Token is expired."
 
 
 def test_get_plan_payment_link() -> None:

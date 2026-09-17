@@ -70,6 +70,7 @@ from .models import (
     SplitPaymentResponse,
     Subscription,
     SubscriptionCreateRequest,
+    TokenizationRequest,
     TokenResponse,
     TrackingIdStatus,
     Transaction,
@@ -139,10 +140,13 @@ class AsyncBepaidClient:
         url: str,
         body: BaseModel | dict | None = None,
         api_version: str | None = None,
+        request_id: str | None = None,
     ) -> dict[str, Any]:
         headers = {"Authorization": self._auth}
         if api_version is not None:
             headers["X-Api-Version"] = api_version
+        if request_id is not None:
+            headers["RequestID"] = request_id
         resp = await self._http.request(
             method,
             url,
@@ -164,50 +168,63 @@ class AsyncBepaidClient:
 
     # ── gateway API ────────────────────────────────────────────────────────
 
-    async def create_payment(self, req: PaymentRequest) -> PaymentResponse:
+    async def create_payment(
+        self, req: PaymentRequest, request_id: str | None = None
+    ) -> PaymentResponse:
         data = await self._request(
             "POST",
             f"{self._base_gateway}/transactions/payments",
             {"request": req.model_dump(by_alias=True, exclude_none=True)},
             api_version="3",
+            request_id=request_id,
         )
         return PaymentResponse.model_validate(data["transaction"])
 
     async def create_authorization(
-        self, req: AuthorizationRequest
+        self, req: AuthorizationRequest, request_id: str | None = None
     ) -> AuthorizationResponse:
         data = await self._request(
             "POST",
             f"{self._base_gateway}/transactions/authorizations",
             {"request": req.model_dump(by_alias=True, exclude_none=True)},
             api_version="3",
+            request_id=request_id,
         )
         return AuthorizationResponse.model_validate(data["transaction"])
 
-    async def capture(self, req: CaptureRequest) -> CaptureResponse:
+    async def capture(
+        self, req: CaptureRequest, request_id: str | None = None
+    ) -> CaptureResponse:
         data = await self._request(
             "POST",
             f"{self._base_gateway}/transactions/captures",
             {"request": req.model_dump(by_alias=True, exclude_none=True)},
             api_version="3",
+            request_id=request_id,
         )
         return CaptureResponse.model_validate(data["transaction"])
 
-    async def void(self, req: VoidRequest) -> VoidResponse:
+    async def void(
+        self, req: VoidRequest, request_id: str | None = None
+    ) -> VoidResponse:
         data = await self._request(
             "POST",
             f"{self._base_gateway}/transactions/voids",
             {"request": req.model_dump(by_alias=True, exclude_none=True)},
             api_version="3",
+            request_id=request_id,
         )
         return VoidResponse.model_validate(data["transaction"])
 
-    async def refund(self, req: RefundRequest) -> RefundResponse:
+    async def refund(
+        self, req: RefundRequest, request_id: str | None = None
+    ) -> RefundResponse:
         data = await self._request(
             "POST",
             f"{self._base_gateway}/transactions/refunds",
             {"request": req.model_dump(by_alias=True, exclude_none=True)},
             api_version="3",
+            request_id=request_id,
         )
         return RefundResponse.model_validate(data["transaction"])
 
@@ -228,12 +245,15 @@ class AsyncBepaidClient:
 
     # ── saved-card charges ─────────────────────────────────────────────────
 
-    async def charge_saved_card(self, req: ChargeRequest) -> Transaction:
+    async def charge_saved_card(
+        self, req: ChargeRequest, request_id: str | None = None
+    ) -> Transaction:
         data = await self._request(
             "POST",
             f"{self._base_gateway}/services/credit_cards/charges",
             {"request": req.model_dump(by_alias=True, exclude_none=True)},
             api_version="3",
+            request_id=request_id,
         )
         return Transaction.model_validate(data["transaction"])
 
@@ -266,6 +286,20 @@ class AsyncBepaidClient:
             api_version="3",
         )
         return TokenResponse.model_validate(data)
+
+    # ── gateway: card tokenization transaction ─────────────────────────────
+
+    async def create_tokenization(
+        self, req: TokenizationRequest, request_id: str | None = None
+    ) -> Transaction:
+        data = await self._request(
+            "POST",
+            f"{self._base_gateway}/transactions/tokenizations",
+            {"request": req.model_dump(by_alias=True, exclude_none=True)},
+            api_version="3",
+            request_id=request_id,
+        )
+        return Transaction.model_validate(data["transaction"])
 
     # ── checkout API ───────────────────────────────────────────────────────
 
@@ -303,40 +337,52 @@ class AsyncBepaidClient:
 
     # ── direct / APM API ───────────────────────────────────────────────────
 
-    async def create_apm_payment(self, req: ApmPaymentRequest) -> ApmPaymentResponse:
+    async def create_apm_payment(
+        self, req: ApmPaymentRequest, request_id: str | None = None
+    ) -> ApmPaymentResponse:
         data = await self._request(
             "POST",
             f"{self._base_api}/beyag/transactions/payments",
             {"request": req.model_dump(by_alias=True, exclude_none=True)},
+            request_id=request_id,
         )
         return ApmPaymentResponse.model_validate(data["transaction"])
 
-    async def apm_refund(self, req: ApmRefundRequest) -> ApmRefundResponse:
+    async def apm_refund(
+        self, req: ApmRefundRequest, request_id: str | None = None
+    ) -> ApmRefundResponse:
         data = await self._request(
             "POST",
             f"{self._base_api}/beyag/transactions/refunds",
             {"request": req.model_dump(by_alias=True, exclude_none=True)},
+            request_id=request_id,
         )
         return ApmRefundResponse.model_validate(data["transaction"])
 
     async def apm_full_refund(
-        self, parent_uid: str, reason: str, amount: int | None = None
+        self,
+        parent_uid: str,
+        reason: str,
+        amount: int | None = None,
+        request_id: str | None = None,
     ) -> ApmRefundResponse:
         req = ApmRefundRequest(parent_uid=parent_uid, reason=reason, amount=amount)
         data = await self._request(
             "POST",
             f"{self._base_api}/beyag/refunds",
             {"request": req.model_dump(by_alias=True, exclude_none=True)},
+            request_id=request_id,
         )
         return ApmRefundResponse.model_validate(data["transaction"])
 
     async def confirm_apm_payment(
-        self, uid: str, req: ApmConfirmRequest
+        self, uid: str, req: ApmConfirmRequest, request_id: str | None = None
     ) -> ApmConfirmResponse:
         data = await self._request(
             "POST",
             f"{self._base_api}/beyag/transactions/{uid}/confirm",
             req.model_dump(by_alias=True, exclude_none=True),
+            request_id=request_id,
         )
         return ApmConfirmResponse.model_validate(data["response"])
 
@@ -353,19 +399,25 @@ class AsyncBepaidClient:
         )
         return [Transaction.model_validate(item) for item in data["transactions"]]
 
-    async def apm_payout(self, req: ApmPayoutRequest) -> ApmPayoutResponse:
+    async def apm_payout(
+        self, req: ApmPayoutRequest, request_id: str | None = None
+    ) -> ApmPayoutResponse:
         data = await self._request(
             "POST",
             f"{self._base_api}/beyag/transactions/payouts",
             {"request": req.model_dump(by_alias=True, exclude_none=True)},
+            request_id=request_id,
         )
         return ApmPayoutResponse.model_validate(data["transaction"])
 
-    async def apm_proof(self, uid: str, req: ProofRequest) -> ProofResponse:
+    async def apm_proof(
+        self, uid: str, req: ProofRequest, request_id: str | None = None
+    ) -> ProofResponse:
         data = await self._request(
             "POST",
             f"{self._base_api}/beyag/transactions/{uid}/proof",
             {"request": req.model_dump(by_alias=True, exclude_none=True)},
+            request_id=request_id,
         )
         return ProofResponse.model_validate(data["transaction"])
 
@@ -397,12 +449,15 @@ class AsyncBepaidClient:
         data = await self._request("DELETE", f"{self._base_api}/beyag/payments/{uid}")
         return Transaction.model_validate(data["transaction"])
 
-    async def checkup(self, req: CheckupRequest) -> Transaction:
+    async def checkup(
+        self, req: CheckupRequest, request_id: str | None = None
+    ) -> Transaction:
         data = await self._request(
             "POST",
             f"{self._base_gateway}/transactions/checkups",
             {"request": req.model_dump(by_alias=True, exclude_none=True)},
             api_version="3",
+            request_id=request_id,
         )
         return Transaction.model_validate(data["transaction"])
 
@@ -489,12 +544,15 @@ class AsyncBepaidClient:
 
     # ── payout ─────────────────────────────────────────────────────────────
 
-    async def create_payout(self, req: PayoutRequest) -> PayoutResponse:
+    async def create_payout(
+        self, req: PayoutRequest, request_id: str | None = None
+    ) -> PayoutResponse:
         data = await self._request(
             "POST",
             f"{self._base_gateway}/transactions/payouts",
             {"request": req.model_dump(by_alias=True, exclude_none=True)},
             api_version="3",
+            request_id=request_id,
         )
         return PayoutResponse.model_validate(data["transaction"])
 
@@ -663,20 +721,28 @@ class BepaidClient:
 
     # ── gateway API ────────────────────────────────────────────────────────
 
-    def create_payment(self, req: PaymentRequest) -> PaymentResponse:
-        return self._invoke("create_payment", req)
+    def create_payment(
+        self, req: PaymentRequest, request_id: str | None = None
+    ) -> PaymentResponse:
+        return self._invoke("create_payment", req, request_id)
 
-    def create_authorization(self, req: AuthorizationRequest) -> AuthorizationResponse:
-        return self._invoke("create_authorization", req)
+    def create_authorization(
+        self, req: AuthorizationRequest, request_id: str | None = None
+    ) -> AuthorizationResponse:
+        return self._invoke("create_authorization", req, request_id)
 
-    def capture(self, req: CaptureRequest) -> CaptureResponse:
-        return self._invoke("capture", req)
+    def capture(
+        self, req: CaptureRequest, request_id: str | None = None
+    ) -> CaptureResponse:
+        return self._invoke("capture", req, request_id)
 
-    def void(self, req: VoidRequest) -> VoidResponse:
-        return self._invoke("void", req)
+    def void(self, req: VoidRequest, request_id: str | None = None) -> VoidResponse:
+        return self._invoke("void", req, request_id)
 
-    def refund(self, req: RefundRequest) -> RefundResponse:
-        return self._invoke("refund", req)
+    def refund(
+        self, req: RefundRequest, request_id: str | None = None
+    ) -> RefundResponse:
+        return self._invoke("refund", req, request_id)
 
     def get_transaction(self, uid: str) -> Transaction:
         return self._invoke("get_transaction", uid)
@@ -686,8 +752,10 @@ class BepaidClient:
 
     # ── saved-card charges ─────────────────────────────────────────────────
 
-    def charge_saved_card(self, req: ChargeRequest) -> Transaction:
-        return self._invoke("charge_saved_card", req)
+    def charge_saved_card(
+        self, req: ChargeRequest, request_id: str | None = None
+    ) -> Transaction:
+        return self._invoke("charge_saved_card", req, request_id)
 
     # ── recipient tokenization ─────────────────────────────────────────────
 
@@ -706,6 +774,11 @@ class BepaidClient:
     def create_token(self, req: CreateTokenRequest) -> TokenResponse:
         return self._invoke("create_token", req)
 
+    def create_tokenization(
+        self, req: TokenizationRequest, request_id: str | None = None
+    ) -> Transaction:
+        return self._invoke("create_tokenization", req, request_id)
+
     # ── checkout API ───────────────────────────────────────────────────────
 
     def create_checkout(self, req: CheckoutRequest) -> CheckoutResponse:
@@ -722,21 +795,29 @@ class BepaidClient:
 
     # ── direct / APM API ───────────────────────────────────────────────────
 
-    def create_apm_payment(self, req: ApmPaymentRequest) -> ApmPaymentResponse:
-        return self._invoke("create_apm_payment", req)
+    def create_apm_payment(
+        self, req: ApmPaymentRequest, request_id: str | None = None
+    ) -> ApmPaymentResponse:
+        return self._invoke("create_apm_payment", req, request_id)
 
-    def apm_refund(self, req: ApmRefundRequest) -> ApmRefundResponse:
-        return self._invoke("apm_refund", req)
+    def apm_refund(
+        self, req: ApmRefundRequest, request_id: str | None = None
+    ) -> ApmRefundResponse:
+        return self._invoke("apm_refund", req, request_id)
 
     def apm_full_refund(
-        self, parent_uid: str, reason: str, amount: int | None = None
+        self,
+        parent_uid: str,
+        reason: str,
+        amount: int | None = None,
+        request_id: str | None = None,
     ) -> ApmRefundResponse:
-        return self._invoke("apm_full_refund", parent_uid, reason, amount)
+        return self._invoke("apm_full_refund", parent_uid, reason, amount, request_id)
 
     def confirm_apm_payment(
-        self, uid: str, req: ApmConfirmRequest
+        self, uid: str, req: ApmConfirmRequest, request_id: str | None = None
     ) -> ApmConfirmResponse:
-        return self._invoke("confirm_apm_payment", uid, req)
+        return self._invoke("confirm_apm_payment", uid, req, request_id)
 
     def get_apm_transaction(self, uid: str) -> Transaction:
         return self._invoke("get_apm_transaction", uid)
@@ -746,11 +827,15 @@ class BepaidClient:
     ) -> list[Transaction]:
         return self._invoke("get_apm_transactions_by_tracking_id", tracking_id)
 
-    def apm_payout(self, req: ApmPayoutRequest) -> ApmPayoutResponse:
-        return self._invoke("apm_payout", req)
+    def apm_payout(
+        self, req: ApmPayoutRequest, request_id: str | None = None
+    ) -> ApmPayoutResponse:
+        return self._invoke("apm_payout", req, request_id)
 
-    def apm_proof(self, uid: str, req: ProofRequest) -> ProofResponse:
-        return self._invoke("apm_proof", uid, req)
+    def apm_proof(
+        self, uid: str, req: ProofRequest, request_id: str | None = None
+    ) -> ProofResponse:
+        return self._invoke("apm_proof", uid, req, request_id)
 
     def check_mts_service(
         self, phone: str, *, test: bool | None = None
@@ -766,8 +851,10 @@ class BepaidClient:
     def delete_erip_payment(self, uid: str) -> Transaction:
         return self._invoke("delete_erip_payment", uid)
 
-    def checkup(self, req: CheckupRequest) -> Transaction:
-        return self._invoke("checkup", req)
+    def checkup(
+        self, req: CheckupRequest, request_id: str | None = None
+    ) -> Transaction:
+        return self._invoke("checkup", req, request_id)
 
     # ── P2P transfer ───────────────────────────────────────────────────────
 
@@ -813,8 +900,10 @@ class BepaidClient:
 
     # ── payout ─────────────────────────────────────────────────────────────
 
-    def create_payout(self, req: PayoutRequest) -> PayoutResponse:
-        return self._invoke("create_payout", req)
+    def create_payout(
+        self, req: PayoutRequest, request_id: str | None = None
+    ) -> PayoutResponse:
+        return self._invoke("create_payout", req, request_id)
 
     # ── APM balance query ───────────────────────────────────────────────────
 
@@ -881,6 +970,13 @@ def parse_subscription_webhook(body: str) -> Subscription:
     """Parse a subscription-service webhook payload (``event``, e.g.
     ``created.subscription``)."""
     return Subscription.model_validate_json(body)
+
+
+def parse_checkout_webhook(body: str) -> CheckoutStatus:
+    """Parse a payment-widget webhook payload (flat checkout-shaped
+    notification, e.g. a token-expiry notice without a ``transaction``
+    envelope)."""
+    return CheckoutStatus.model_validate_json(body)
 
 
 def verify_webhook_signature(
