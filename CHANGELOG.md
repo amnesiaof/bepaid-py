@@ -5,6 +5,8 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
 ## [0.5.12] - 2026-09-17
 
 ### Added
@@ -213,7 +215,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Direct (APM) API: `create_apm_payment`, `apm_refund`, `apm_full_refund`.
 - Webhooks: `verify_webhook_auth` and `WebhookNotification` parsing.
 
-[Unreleased]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.6...HEAD
+[Unreleased]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.12...HEAD
+[0.5.12]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.11...v0.5.12
+[0.5.11]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.10...v0.5.11
+[0.5.10]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.9...v0.5.10
+[0.5.9]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.8...v0.5.9
+[0.5.8]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.7...v0.5.8
+[0.5.7]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.6...v0.5.7
 [0.5.6]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.5...v0.5.6
 [0.5.5]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.3...v0.5.4
