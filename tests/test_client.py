@@ -6,8 +6,9 @@ import json
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
-from bepaid import AsyncBepaidClient, BepaidClient, BepaidError
+from bepaid import AsyncBepaidClient, BepaidClient, BepaidError, models
 from bepaid.client import (
     parse_checkout_webhook,
     parse_subscription_webhook,
@@ -17,6 +18,7 @@ from bepaid.client import (
 )
 from bepaid.errors import ApiError
 from bepaid.models import (
+    AdditionalData,
     ApmConfirmRequest,
     ApmPaymentRequest,
     ApmPayoutRequest,
@@ -41,6 +43,17 @@ from bepaid.models import (
     Fiscalization,
     FiscalizationPosition,
     FiscalizationTax,
+    MasterpassCardResponse,
+    MasterpassData,
+    MasterpassDeleteCardRequest,
+    MasterpassDeleteCardResponse,
+    MasterpassGetCardRequest,
+    MasterpassGetCardsRequest,
+    MasterpassGetCardsResponse,
+    MasterpassGetSavedCardRequest,
+    MasterpassLoginRequest,
+    MasterpassLoginResponse,
+    MasterpassParams,
     P2pRequest,
     PaymentRequest,
     PayoutAddress,
@@ -82,6 +95,8 @@ class MockTransport(httpx.MockTransport):
             raise AssertionError(f"Unmocked request: {key}")
         spec = self.handlers[key]
         assert request.headers.get("authorization") == AUTH, "bad auth"
+        if "expect_host" in spec:
+            assert request.url.host == spec["expect_host"]
         if "expect_version" in spec:
             assert request.headers.get("x-api-version") == spec["expect_version"], (
                 "bad api version"
@@ -105,6 +120,207 @@ def client(handlers: dict) -> BepaidClient:
 
 def async_client(handlers: dict) -> AsyncBepaidClient:
     return AsyncBepaidClient(SHOP_ID, SECRET, transport=MockTransport(handlers))
+
+
+MASTERPASS_CASES = [
+    (
+        "login",
+        MasterpassLoginRequest,
+        {"phone": "375291234567", "fingerprint": "device-1"},
+        {"phone_check_date": "2026-09-17T10:00:00Z", "channel": 0, "test": False},
+        {"session": "session-1", "is_otp_required": False, "user_status": 0},
+        MasterpassLoginResponse,
+    ),
+    (
+        "get_cards",
+        MasterpassGetCardsRequest,
+        {"session": "session-1"},
+        {"test": False},
+        {
+            "card_list": [
+                {
+                    "card_holder": "Test User",
+                    "token": "masterpass-token",
+                    "date": "2026-09-17",
+                    "expiry_date": "2030-12",
+                    "pan_mask": "555555******4444",
+                    "card_status": 0,
+                    "is_recurring": False,
+                    "card_name": "Test card",
+                    "comment1": "one",
+                    "comment2": "two",
+                    "comment3": "three",
+                }
+            ]
+        },
+        MasterpassGetCardsResponse,
+    ),
+    (
+        "get_card",
+        MasterpassGetCardRequest,
+        {"token": "masterpass-token", "amount": 100, "currency": "BYN"},
+        {"session": "session-1", "test": False},
+        {
+            "credit_card": {
+                "token": "gateway-token",
+                "brand": "master",
+                "last_4": "4444",
+            },
+            "recommendation": 0,
+            "required": 0,
+        },
+        MasterpassCardResponse,
+    ),
+    (
+        "get_saved_card",
+        MasterpassGetSavedCardRequest,
+        {"credit_card_token": "gateway-token", "amount": 100, "currency": "BYN"},
+        {"session": "session-1", "test": False},
+        {
+            "credit_card": {
+                "token": "gateway-token",
+                "exp_month": 12,
+                "exp_year": 2030,
+            },
+            "recommendation": 1,
+            "required": 1,
+        },
+        MasterpassCardResponse,
+    ),
+    (
+        "delete_card",
+        MasterpassDeleteCardRequest,
+        {"session": "session-1", "token": "masterpass-token"},
+        {"test": False},
+        {"status": "successful"},
+        MasterpassDeleteCardResponse,
+    ),
+]
+
+
+def masterpass_case(case: tuple, with_options: bool, outcome: str) -> tuple:
+    route, request_type, required, optional, success, response_type = case
+    body = {**required, **optional} if with_options else required.copy()
+    payload = success
+    if outcome == "error":
+        payload = {"status": "failed", "error": "Invalid session", "error_code": 101}
+        if route == "get_saved_card":
+            payload = {"status": "failed", "message": "Saved card not found"}
+    elif outcome == "empty":
+        payload = {"card_list": []} if route == "get_cards" else {}
+    handlers = {
+        ("POST", f"/masterpass/{route}"): {
+            "expect_host": "gateway.bepaid.by",
+            "expect_version": "3",
+            "expect_request_id": None,
+            "expect_body": body,
+            "json": payload,
+        }
+    }
+    return request_type.model_validate(body), response_type, payload, handlers
+
+
+@pytest.mark.parametrize("case", MASTERPASS_CASES, ids=[c[0] for c in MASTERPASS_CASES])
+@pytest.mark.parametrize("with_options", [False, True])
+@pytest.mark.parametrize("outcome", ["success", "error", "empty"])
+def test_masterpass(case: tuple, with_options: bool, outcome: str) -> None:
+    req, response_type, payload, handlers = masterpass_case(case, with_options, outcome)
+    with client(handlers) as c:
+        response = getattr(c, f"masterpass_{case[0]}")(req)
+    assert isinstance(response, response_type)
+    assert response.model_dump(exclude_none=True) == payload
+
+
+@pytest.mark.parametrize("case", MASTERPASS_CASES, ids=[c[0] for c in MASTERPASS_CASES])
+def test_masterpass_required_fields(case: tuple) -> None:
+    _, request_type, required, _, _, _ = case
+    for field in required:
+        with pytest.raises(ValidationError) as exc:
+            request_type.model_validate(
+                {key: value for key, value in required.items() if key != field}
+            )
+        assert any(
+            error["loc"] == (field,) and error["type"] == "missing"
+            for error in exc.value.errors()
+        )
+
+
+@pytest.mark.parametrize("case", MASTERPASS_CASES, ids=[c[0] for c in MASTERPASS_CASES])
+def test_masterpass_http_error(case: tuple) -> None:
+    req, _, _, handlers = masterpass_case(case, False, "error")
+    spec = handlers[("POST", f"/masterpass/{case[0]}")]
+    spec.update(status=400, json={"message": "Invalid request"})
+    with client(handlers) as c, pytest.raises(ApiError) as exc:
+        getattr(c, f"masterpass_{case[0]}")(req)
+    assert exc.value.status == 400
+    assert exc.value.message == "Invalid request"
+
+
+def masterpass_transaction_case(
+    operation: str, status: str, result_status: str
+) -> tuple:
+    metadata = AdditionalData(
+        contract=["recurring"],
+        masterpass=MasterpassData(params=MasterpassParams(session="session-1")),
+    )
+    body = {
+        "amount": "100" if operation == "payment" else 100,
+        "currency": "BYN",
+        "description": "Masterpass payment",
+        "tracking_id": "masterpass-1",
+        "test": True,
+        "credit_card": {"token": "gateway-token"},
+        "additional_data": {
+            "contract": ["recurring"],
+            "masterpass": {"params": {"session": "session-1"}},
+        },
+    }
+    request_type = PaymentRequest if operation == "payment" else AuthorizationRequest
+    req = request_type.model_validate({**body, "additional_data": metadata})
+    response_type = models.Transaction
+    additional_data = {
+        "contract": ["recurring"],
+        "masterpass": {
+            "params": {"session": "session-1"},
+            "result": {
+                "status": result_status,
+                "error_code": 0,
+                "details": {"unknown": [False, None]},
+            },
+        },
+        "other": {"preserved": True},
+    }
+    handlers = {
+        ("POST", f"/transactions/{operation}s"): {
+            "expect_version": "3",
+            "expect_body": {"request": body},
+            "json": {
+                "transaction": {
+                    "uid": "mp-1",
+                    "status": status,
+                    "additional_data": additional_data,
+                }
+            },
+        }
+    }
+    return req, response_type, additional_data, handlers
+
+
+@pytest.mark.parametrize("operation", ["payment", "authorization"])
+@pytest.mark.parametrize("status", ["successful", "failed"])
+@pytest.mark.parametrize("result_status", ["successful", "failed"])
+def test_masterpass_transaction_metadata(
+    operation: str, status: str, result_status: str
+) -> None:
+    req, response_type, additional_data, handlers = masterpass_transaction_case(
+        operation, status, result_status
+    )
+    with client(handlers) as c:
+        response = getattr(c, f"create_{operation}")(req)
+    assert isinstance(response, response_type)
+    assert response.additional_data == additional_data
+    assert response.model_dump()["additional_data"] == additional_data
+    assert response.status == status
 
 
 def _payment_request() -> PaymentRequest:
@@ -131,6 +347,47 @@ def test_create_payment_happy_path() -> None:
     )
     resp = c.create_payment(_payment_request())
     assert resp.uid == "u1"
+
+
+@pytest.mark.parametrize(
+    "card",
+    [
+        {"token": "saved-card-token"},
+        {"token": "$begateway_google_pay_1_0_0$eyJ0ZXN0Ijp0cnVlfQ=="},
+        {"token": "$begateway_google_pay_decrypted_1_0_0$eyJ0ZXN0Ijp0cnVlfQ=="},
+        {"token": "$begateway_samsung_pay_decrypted_1_0_0$eyJ0ZXN0Ijp0cnVlfQ=="},
+        {
+            "number": "4242424242424242",
+            "verification_value": "123",
+            "holder": "John Smith",
+            "exp_month": 10,
+            "exp_year": 2030,
+        },
+    ],
+)
+def test_create_payment_serializes_card(card: dict) -> None:
+    req = _payment_request()
+    req.credit_card = CreditCardRaw(**card)
+    with client(
+        {
+            ("POST", "/transactions/payments"): {
+                "expect_version": "3",
+                "expect_body": {
+                    "request": {
+                        "amount": "700",
+                        "currency": "USD",
+                        "test": True,
+                        "description": "Test transaction",
+                        "tracking_id": "tracking_id_000",
+                        "duplicate_check": False,
+                        "credit_card": card,
+                    }
+                },
+                "json": {"transaction": {"uid": "u1"}},
+            }
+        }
+    ) as c:
+        assert c.create_payment(req).uid == "u1"
 
 
 def test_create_payment_sends_request_id() -> None:
@@ -190,6 +447,29 @@ def test_create_payment_serializes_request() -> None:
         }
     )
     c.create_payment(_payment_request())
+
+
+def test_api_error_preserves_structured_details() -> None:
+    payload = {
+        **VISA_ALIAS_ERRORS[0][1],
+        "errors": {"phone_number": ["is invalid"]},
+    }
+    with (
+        client(
+            {("POST", "/transactions/payments"): {"status": 400, "json": payload}}
+        ) as c,
+        pytest.raises(ApiError) as exc,
+    ):
+        c.create_payment(_payment_request())
+    assert exc.value.message == payload["message"]
+    assert exc.value.errors == payload["errors"]
+    assert exc.value.error_code == "request_validation_error"
+    assert exc.value.code == "E.1025"
+    assert exc.value.friendly_message == "Invalid request params"
+    legacy = ApiError(400, "Validation failed", {"amount": ["can't be blank"]})
+    assert str(legacy) == "API error 400: Validation failed"
+    assert legacy.errors == {"amount": ["can't be blank"]}
+    assert legacy.error_code is None
 
 
 def test_api_error_raises() -> None:
@@ -375,7 +655,16 @@ def test_create_payment_serializes_custom_fields() -> None:
     )
 
 
-def test_create_authorization_returns_redirect() -> None:
+@pytest.mark.parametrize(
+    "token",
+    [
+        "saved-card-token",
+        "$begateway_google_pay_1_0_0$eyJ0ZXN0Ijp0cnVlfQ==",
+        "$begateway_google_pay_decrypted_1_0_0$eyJ0ZXN0Ijp0cnVlfQ==",
+        "$begateway_samsung_pay_decrypted_1_0_0$eyJ0ZXN0Ijp0cnVlfQ==",
+    ],
+)
+def test_create_authorization_returns_redirect(token: str) -> None:
     c = client(
         {
             ("POST", "/transactions/authorizations"): {
@@ -387,6 +676,8 @@ def test_create_authorization_returns_redirect() -> None:
                         "description": "Test",
                         "tracking_id": "x",
                         "duplicate_check": False,
+                        "credit_card": {"token": token},
+                        "additional_data": {"contract": ["recurring"]},
                     }
                 },
                 "json": {
@@ -411,6 +702,8 @@ def test_create_authorization_returns_redirect() -> None:
             description="Test",
             tracking_id="x",
             duplicate_check=False,
+            credit_card=CreditCardRaw(token=token),
+            additional_data=AdditionalData(contract=["recurring"]),
         )
     )
     assert resp.status == "incomplete"
@@ -758,6 +1051,314 @@ def test_apm_payment_and_refund() -> None:
     assert r.status == "successful"
 
 
+ERIP_PAYMENT = {
+    "uid": "erip-1",
+    "id": "erip-1",
+    "status": "pending",
+    "type": "payment",
+    "amount": 0,
+    "currency": "BYN",
+    "description": "Meter payment",
+    "order_id": "123456789012",
+    "tracking_id": "order-1",
+    "payment_method_type": "erip",
+    "language": "ru",
+    "test": False,
+    "version": 0,
+    "created_at": "2026-09-17T10:00:00Z",
+    "updated_at": "2026-09-17T10:00:01Z",
+    "expired_at": "2026-09-18T10:00:00Z",
+    "paid_at": "2026-09-17T10:00:02Z",
+    "closed_at": "2026-09-17T10:00:03Z",
+    "settled_at": "2026-09-17T10:00:04Z",
+    "psp_settled_at": None,
+    "registry_id": None,
+    "manually_corrected_at": "2026-09-17T10:00:05Z",
+    "customer": {"ip": "127.0.0.1", "email": None, "middle_name": "Ivanovich"},
+    "billing_address": {"first_name": "Ivan", "middle_name": "Ivanovich"},
+    "additional_data": {"notifications": ["sms"], "receipt_text": ["Thank you"]},
+    "payment": {"gateway_id": 3483, "status": "pending", "ref_id": None},
+    "erip": {
+        "request_id": "00001",
+        "transaction_id": 42,
+        "service_no": 99999999,
+        "service_no_erip": "12345678",
+        "account_number": "123",
+        "instruction": ["Payments -> Shop"],
+        "service_info": ["Meter payment"],
+        "receipt": ["Thank you"],
+        "qr_code_raw": "dGVzdA==",
+        "qr_code": "data:image/png;base64,dGVzdA==",
+        "banks": [{"name": "Bank", "platform_urls": {"ios": "bank://pay#"}}],
+    },
+}
+
+ERIP_REFUND = {
+    "uid": "refund-1",
+    "id": "refund-1",
+    "parent_uid": "erip-1",
+    "type": "refund",
+    "status": "successful",
+    "message": "Updated manually",
+    "amount": 50,
+    "currency": "BYN",
+    "reason": "Client request",
+    "created_at": "2026-09-17T10:00:00Z",
+    "paid_at": "2026-09-17T10:00:01Z",
+    "test": False,
+    "language": "ru",
+    "version": 2,
+    "settled_at": None,
+    "psp_settled_at": None,
+    "registry_id": None,
+    "payment_method_type": "erip",
+    "erip": {"service_no": "6777"},
+    "refund": {"ref_id": "8304334", "rrn": None, "status": "successful"},
+}
+
+ERIP_CASES = [
+    "create_erip_payment",
+    "create_apm_payment",
+    "apm_full_refund",
+    "get_apm_refund",
+    "tree_list",
+    "tree_object",
+    "create_authorization",
+    "create_checkout",
+    "create_payment_token",
+]
+
+
+def erip_case(case: str) -> tuple:
+    operation = case
+    method = "POST"
+    host = "api.bepaid.by"
+    version = None
+    request_id = None
+    if case in ("create_erip_payment", "create_apm_payment"):
+        body = {
+            "amount": 0,
+            "currency": "BYN",
+            "description": "Meter payment",
+            "ip": "127.0.0.1",
+            "payment_method": {
+                "type": "erip",
+                "account_number": "123",
+                "service_no": "99999999",
+                "service_info": ["Meter payment"],
+                "erip_devices": [
+                    {
+                        "name": "Water",
+                        "item_unit": "m3",
+                        "rank": "4",
+                        "value": "1234",
+                        "rate": "0.4392",
+                    }
+                ],
+            },
+            "customer": {"middle_name": "Ivanovich"},
+            "additional_data": {"notifications": ["sms"]},
+        }
+        args = (ApmPaymentRequest.model_validate(body), "erip-request-1")
+        request_id = "erip-request-1"
+        path = (
+            "/beyag/payments"
+            if case == "create_erip_payment"
+            else "/beyag/transactions/payments"
+        )
+        if case == "create_apm_payment":
+            body["method"] = body.pop("payment_method")
+        body = {"request": body}
+        payload = ERIP_PAYMENT
+        response_type = models.ApmPaymentResponse
+        response = {"transaction": payload}
+    elif case in ("apm_full_refund", "get_apm_refund"):
+        path = "/beyag/refunds"
+        body = {
+            "request": {
+                "parent_uid": "erip-1",
+                "reason": "Client request",
+                "amount": 50,
+            }
+        }
+        args = ("erip-1", "Client request", 50, "refund-request-1")
+        request_id = "refund-request-1"
+        if case == "get_apm_refund":
+            method = "GET"
+            path += "/refund-1"
+            args = ("refund-1",)
+            request_id = None
+        payload = ERIP_REFUND
+        response_type = models.ApmRefundResponse
+        response = {"transaction": payload}
+    elif case.startswith("tree_"):
+        operation = "get_erip_pay_list"
+        path = "/beyag/gateways/komplat/get_pay_list"
+        body = {"terminal_id": "10000002", "pay_code": "11000000000", "di_type": "9191"}
+        payload = [{"code": "11000304194", "name": "Services", "di_type": "9120"}]
+        if case == "tree_object":
+            body.update(
+                test=False,
+                erip_session_id="session-1",
+                attributes={"1001": "0291234567"},
+                customer={"personal_account": "123", "erip_account": "456"},
+            )
+            payload = {
+                "code": "10004372291",
+                "erip_session_id": "session-1",
+                "billed_amount": "122.43",
+                "fixed_amount": False,
+                "customer_name": None,
+                "required_attributes": [],
+                "information_attributes": [{"name": "Debt", "value": None}],
+            }
+        args = (models.EripPayListRequest.model_validate(body),)
+        response_type = list if case == "tree_list" else dict
+        response = payload
+    elif case == "create_authorization":
+        host = "gateway.bepaid.by"
+        version = "3"
+        path = "/transactions/authorizations"
+        body = {
+            "amount": 100,
+            "currency": "BYN",
+            "description": "ERIP",
+            "tracking_id": "order-1",
+            "credit_card": {"token": "card-token"},
+            "additional_data": {
+                "komplat": {
+                    "pay_code": "10000156731",
+                    "di_type": "9191",
+                    "erip_session_id": "session-1",
+                }
+            },
+        }
+        args = (AuthorizationRequest.model_validate(body),)
+        body = {"request": body}
+        payload = {"uid": "authorization-1"}
+        response_type = models.Transaction
+        response = {"transaction": payload}
+    else:
+        path = "/payments/tokens"
+        if case == "create_checkout":
+            version = "2"
+            host = "checkout.bepaid.by"
+            path = "/ctp/api/checkouts"
+        body = {
+            "transaction_type": "payment",
+            "payment_method": {
+                "types": ["credit_card", "bank_transfer"],
+                "excluded_types": ["erip"],
+                "bank_transfer": {"account": "DE89370400440532013000"},
+            },
+            "order": {
+                "amount": 100,
+                "currency": "BYN",
+                "additional_data": {
+                    "contract": ["recurring"],
+                    "bank_transfer": {"reference": "order-1"},
+                },
+            },
+        }
+        args = (CheckoutRequest.model_validate(body),)
+        body = {"checkout": body}
+        payload = {"token": "checkout-1"}
+        response_type = models.CheckoutResponse
+        response = {"checkout": payload}
+    spec = {
+        "expect_host": host,
+        "expect_version": version,
+        "expect_request_id": request_id,
+        "json": response,
+    }
+    if method == "POST":
+        spec["expect_body"] = body
+    return operation, args, payload, response_type, {(method, path): spec}
+
+
+@pytest.mark.parametrize("case", ERIP_CASES)
+def test_erip_contract(case: str) -> None:
+    operation, args, payload, response_type, handlers = erip_case(case)
+    with client(handlers) as c:
+        response = getattr(c, operation)(*args)
+    assert isinstance(response, response_type)
+    assert (
+        response
+        if isinstance(response, (dict, list))
+        else response.model_dump(exclude_unset=True)
+    ) == payload
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("currency", "USD"),
+        ("description", None),
+        ("ip", None),
+        ("payment_method", {"type": "erip"}),
+        ("payment_method", {"type": "mts_money", "account_number": "123"}),
+        ("payment_method", {"type": "erip", "account_number": 123}),
+    ],
+)
+def test_erip_rejects_invalid_request(field: str, value: object) -> None:
+    body = {
+        "amount": 0,
+        "currency": "BYN",
+        "description": "ERIP",
+        "ip": "127.0.0.1",
+        "payment_method": {"type": "erip", "account_number": "123"},
+    }
+    body[field] = value
+    with client({}) as c, pytest.raises(ValueError):
+        c.create_erip_payment(ApmPaymentRequest.model_validate(body))
+
+
+def test_erip_refund_requires_amount() -> None:
+    with client({}) as c, pytest.raises(ValueError, match="amount"):
+        c.apm_full_refund("erip-1", "Client request")
+
+
+def test_erip_tree_required_fields() -> None:
+    body = {"terminal_id": "10000002", "pay_code": "11000000000", "di_type": "9191"}
+    for field in body:
+        with pytest.raises(ValidationError):
+            models.EripPayListRequest.model_validate(
+                {key: value for key, value in body.items() if key != field}
+            )
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        ERIP_PAYMENT,
+        ERIP_REFUND,
+        {
+            "uid": "external-1",
+            "status": "successful",
+            "method_type": "erip_external",
+            "payment_method_type": "erip_external",
+            "erip_external": {
+                "account": "123",
+                "service_no": "6777",
+                "details": [False, None],
+            },
+            "bank_transfer": {"account": "123"},
+        },
+    ],
+)
+def test_erip_webhook_preserves_metadata(payload: dict) -> None:
+    notification = parse_webhook(json.dumps({"transaction": payload}))
+    assert notification.model_dump(exclude_unset=True) == {"transaction": payload}
+
+
+def test_erip_transaction_billing_address() -> None:
+    transaction = models.Transaction.model_validate(ERIP_PAYMENT)
+    assert transaction.billing_address is not None
+    assert transaction.billing_address.middle_name == "Ivanovich"
+    assert transaction.customer is not None
+    assert transaction.customer.middle_name == "Ivanovich"
+
+
 def test_apm_payment_constructors_serialize() -> None:
     device = EripDevice(
         name="Холодная вода", item_unit="м3", rank="4", value="1234", rate="0.4392"
@@ -892,6 +1493,7 @@ def test_apm_payment_constructors_serialize() -> None:
         ),
     ]
     for req, expected in cases:
+        expected["request"]["method"] = expected["request"].pop("payment_method")
         c = client(
             {
                 ("POST", "/beyag/transactions/payments"): {
@@ -911,7 +1513,7 @@ def test_apm_payment_constructors_serialize() -> None:
                     "request": {
                         "amount": 1000,
                         "currency": "BYN",
-                        "payment_method": {
+                        "method": {
                             "type": "erip",
                             "account_number": "123",
                             "service_no": "99999999",
@@ -1008,6 +1610,244 @@ def test_errors_baseclass() -> None:
     assert issubclass(ApiError, BepaidError)
 
 
+APM_BATCH7_CASES = [
+    "generic",
+    "erip",
+    "confirm",
+    "cancel",
+    "legacy",
+    "sberpay",
+    "mts_v2_true",
+    "mts_v2_false",
+    "mts_v2_null",
+    "mts_v3",
+    "qiwi_empty",
+    "qiwi_message",
+    "qiwi_error",
+]
+
+
+def apm_batch7_case(case: str) -> tuple:
+    path = "/beyag/transactions/payments"
+    version = None
+    request_id = None
+    payload = {"uid": "apm-7", "status": "pending"}
+    response = {"transaction": payload}
+    status = 200
+    if case in ("generic", "erip"):
+        req = ApmPaymentRequest(
+            amount=100,
+            currency="BYN",
+            description="Invoice",
+            ip="127.0.0.1",
+            payment_method={"type": "erip", "account_number": "123"},
+        )
+        operation = "create_apm_payment" if case == "generic" else "create_erip_payment"
+        if case == "erip":
+            path = "/beyag/payments"
+        body = {
+            "request": {
+                "amount": 100,
+                "currency": "BYN",
+                "description": "Invoice",
+                "ip": "127.0.0.1",
+                "method" if case == "generic" else "payment_method": {
+                    "type": "erip",
+                    "account_number": "123",
+                },
+            }
+        }
+        request_id = "batch7"
+        args = (req, request_id)
+    elif case in ("confirm", "cancel", "legacy", "sberpay"):
+        operation = "confirm_apm_payment"
+        path = "/beyag/transactions/apm-7/confirm"
+        fields = {"confirm_type": case}
+        if case == "legacy":
+            fields = {
+                "transaction_reference": "receipt-7",
+                "skip_duplicate_check": False,
+            }
+        elif case == "sberpay":
+            fields = {"phone": "+79123456789"}
+        args = ("apm-7", ApmConfirmRequest.model_validate(fields), "batch7")
+        request_id = "batch7"
+        body = fields if case == "sberpay" else {"request": fields}
+        payload = {
+            "parent_uid": "apm-7",
+            "type": "confirm",
+            "status": "successful",
+            "message": "Processed",
+            "created_at": "2026-04-07T13:04:31.189+00:00",
+            "amount": 6500,
+            "currency": "BYN",
+        }
+        response = {
+            "transaction" if case in ("confirm", "cancel") else "response": payload
+        }
+    elif case.startswith("mts_"):
+        operation = "check_mts_service" if case == "mts_v3" else "check_mts_service_v2"
+        path = (
+            "/beyag/gateways/mts_money_widget/check_service"
+            if case == "mts_v3"
+            else "/beyag/gateways/mts_money/check_service"
+        )
+        version = "3" if case == "mts_v3" else "2"
+        args = ("375295222222",)
+        body = {
+            "request": {
+                "customer": {"phone": "375295222222"},
+                **({"test": False} if case != "mts_v2_null" else {}),
+            }
+        }
+        payload = {
+            "service_activated": True
+            if case in ("mts_v2_true", "mts_v3")
+            else False
+            if case == "mts_v2_false"
+            else None,
+            "message": "Service check",
+            "validation": {"operator": "mts", "message": "OK"},
+        }
+        if case == "mts_v2_null":
+            payload["error_code"] = "invalid_phone"
+        response = payload
+    else:
+        operation = "test_qiwi_terminal_payment"
+        path = "/beyag/testing/payment"
+        args = (1000, "RUB", "test_account_123")
+        body = {
+            "request": {
+                "amount": 1000,
+                "currency": "RUB",
+                "method": {"type": "qiwi_terminal", "account": "test_account_123"},
+                "test": True,
+            }
+        }
+        payload = {} if case == "qiwi_empty" else {"message": "4 Wrong account format"}
+        response = None if case == "qiwi_empty" else payload
+        if case == "qiwi_error":
+            status = 400
+    spec = {
+        "expect_host": "api.bepaid.by",
+        "expect_version": version,
+        "expect_request_id": request_id,
+        "expect_body": body,
+        "json": response,
+        "status": status,
+    }
+    kwargs = (
+        {"test": False} if case.startswith("mts_") and case != "mts_v2_null" else {}
+    )
+    return operation, args, kwargs, payload, {("POST", path): spec}
+
+
+@pytest.mark.parametrize("case", APM_BATCH7_CASES)
+def test_apm_batch7_contract(case: str) -> None:
+    operation, args, kwargs, payload, handlers = apm_batch7_case(case)
+    with client(handlers) as c:
+        if case == "qiwi_error":
+            with pytest.raises(ApiError) as exc:
+                getattr(c, operation)(*args, **kwargs)
+            assert exc.value.status == 400
+            assert exc.value.message == payload["message"]
+            return
+        result = getattr(c, operation)(*args, **kwargs)
+    assert (
+        result if isinstance(result, dict) else result.model_dump(exclude_unset=True)
+    ) == payload
+    if case in ("generic", "erip"):
+        assert args[0].payment_method == {"type": "erip", "account_number": "123"}
+
+
+APM_METHOD_RESULTS = [
+    {
+        "krok": {
+            "qr_code": "data:image/png;base64,dGVzdA==",
+            "banks": [{"name": "Bank", "platform_urls": {"ios": "bank://pay"}}],
+        }
+    },
+    {"pix": {"hash": "pix-hash"}},
+    {"crypto_currency": {"amount": "0.00001000", "wallet": "wallet-7"}},
+    {"sbp": {"token": "sbp-token"}},
+    {"sberpay_qr_deeplink": {"qr_code": "dGVzdA==", "deep_link": "sberpay://invoice"}},
+    {"form": {"action": "sberpay://invoice", "method": "GET", "fields": []}},
+    {"form": "<form></form>"},
+]
+
+
+@pytest.mark.parametrize("details", APM_METHOD_RESULTS)
+@pytest.mark.parametrize(
+    "operation",
+    [
+        "create_apm_payment",
+        "get_apm_transaction",
+        "get_apm_transactions_by_tracking_id",
+    ],
+)
+def test_apm_batch7_method_results(details: dict, operation: str) -> None:
+    payload = {"uid": "apm-7", "status": "pending", **details}
+    path = "/beyag/transactions/apm-7"
+    method = "GET"
+    args = ("apm-7",)
+    response = {"transaction": payload}
+    if operation == "create_apm_payment":
+        method, path = "POST", "/beyag/transactions/payments"
+        args = (ApmPaymentRequest.krok(100, "BYN", "https://example.com/return"),)
+    elif operation == "get_apm_transactions_by_tracking_id":
+        path = "/beyag/transactions/tracking_id/apm-7"
+        response = {"transactions": [payload]}
+    with client({(method, path): {"json": response}}) as c:
+        result = getattr(c, operation)(*args)
+    if isinstance(result, list):
+        result = result[0]
+    assert result.model_dump(exclude_unset=True) == payload
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"confirm_type": "unknown"},
+        {"confirm_type": "confirm", "transaction_reference": "receipt"},
+        {"confirm_type": "cancel", "phone": "+79123456789"},
+        {"phone": "+79123456789", "transaction_reference": "receipt"},
+        {"phone": "+79123456789", "skip_duplicate_check": False},
+        {"confirm_type": "confirm", "skip_duplicate_check": False},
+    ],
+)
+def test_apm_batch7_rejects_mixed_or_invalid_confirm_mode(fields: dict) -> None:
+    with client({}) as c, pytest.raises(ValueError):
+        c.confirm_apm_payment("apm-7", ApmConfirmRequest.model_validate(fields))
+
+
+def test_apm_batch7_customer_fields() -> None:
+    req = ApmPaymentRequest(
+        amount=100,
+        currency="BYN",
+        payment_method={"type": "pix"},
+        customer=models.Customer.model_validate(
+            {"gender": "male", "street": "Main Street"}
+        ),
+    )
+    with client(
+        {
+            ("POST", "/beyag/transactions/payments"): {
+                "expect_body": {
+                    "request": {
+                        "amount": 100,
+                        "currency": "BYN",
+                        "method": {"type": "pix"},
+                        "customer": {"gender": "male", "street": "Main Street"},
+                    }
+                },
+                "json": {"transaction": {"uid": "apm-7"}},
+            }
+        }
+    ) as c:
+        c.create_apm_payment(req)
+    assert models.Customer().model_dump(exclude_none=True) == {}
+
+
 def test_apm_confirm() -> None:
     c = client(
         {
@@ -1033,6 +1873,193 @@ def test_apm_confirm() -> None:
     )
     assert resp.status == "successful"
     assert resp.type == "confirm"
+
+
+VISA_ALIAS_SUCCESS = {
+    "holder": "Test Recipient",
+    "stamp": "card-stamp",
+    "brand": "visa",
+    "last_4": "0000",
+    "first_1": "4",
+    "bin": "420000",
+    "bin_8": "42000000",
+    "issuer_country": "BY",
+    "issuer_name": "Test Bank",
+    "product": "Visa Classic",
+    "exp_month": 12,
+    "exp_year": 2030,
+    "token_provider": "visa",
+    "token": "visa-alias-token",
+    "service_info": {
+        "recipientName": "Test Recipient",
+        "issuerName": "Test Bank",
+        "cardType": "Debit",
+        "address1": "1 Test Street",
+        "address2": "Unit 2",
+        "city": "Minsk",
+        "country": "BY",
+        "postalCode": "220000",
+    },
+}
+
+VISA_ALIAS_ERRORS = [
+    (
+        400,
+        {
+            "error_code": "request_validation_error",
+            "message": {"recipient_info": {"phone_number": ["is in invalid format"]}},
+            "status": "error",
+            "code": "E.1025",
+            "friendly_message": "Invalid request params",
+        },
+    ),
+    (
+        404,
+        {
+            "status": "error",
+            "code": "E.1037",
+            "message": "Card Not Found",
+            "friendly_message": "Card Not Found",
+        },
+    ),
+]
+
+
+def visa_alias_case(payload: dict, status: int = 200) -> tuple:
+    req = models.VisaAliasPhoneRequest(
+        recipient_info=models.VisaAliasRecipientInfo(phone_number="375291234567")
+    )
+    handlers = {
+        ("POST", "/services/visa-alias/verify-phone"): {
+            "expect_host": "gateway.bepaid.by",
+            "expect_version": "3",
+            "expect_body": {"recipient_info": {"phone_number": "375291234567"}},
+            "status": status,
+            "json": payload,
+        }
+    }
+    return req, handlers
+
+
+def test_visa_alias_success() -> None:
+    req, handlers = visa_alias_case(VISA_ALIAS_SUCCESS)
+    with client(handlers) as c:
+        response = c.verify_visa_alias(req)
+    assert isinstance(response, models.VisaAliasPhoneResponse)
+    assert isinstance(response, models.CreditCardInfo)
+    assert response.token == "visa-alias-token"
+    assert response.service_info is not None
+    assert response.service_info.recipient_name == "Test Recipient"
+    assert response.model_dump(by_alias=True, exclude_none=True) == VISA_ALIAS_SUCCESS
+
+
+@pytest.mark.parametrize("status,payload", VISA_ALIAS_ERRORS)
+def test_visa_alias_http_error(status: int, payload: dict) -> None:
+    req, handlers = visa_alias_case(payload, status)
+    with client(handlers) as c, pytest.raises(ApiError) as exc:
+        c.verify_visa_alias(req)
+    assert exc.value.status == status
+    assert exc.value.message == payload["message"]
+    assert exc.value.errors == payload.get("errors")
+    assert exc.value.error_code == payload.get("error_code")
+    assert exc.value.code == payload["code"]
+    assert exc.value.friendly_message == payload["friendly_message"]
+    assert str(exc.value) == f"API error {status}: {payload['message']}"
+
+
+def test_visa_alias_requires_phone_string() -> None:
+    for body in ({}, {"recipient_info": {}}, {"recipient_info": {"phone_number": 123}}):
+        with pytest.raises(ValidationError):
+            models.VisaAliasPhoneRequest.model_validate(body)
+
+
+def p2p_case(operation: str) -> tuple:
+    body = {
+        "amount": 100,
+        "currency": "EUR",
+        "credit_card": {"token": "sender-token"},
+        "recipient_card": {"token": "recipient-token"},
+        "test": False,
+        "tracking_id": "p2p-1",
+        "expired_at": "2026-09-18T10:00:00Z",
+        "duplicate_check": False,
+        "language": "en",
+        "notification_url": "https://example.com/notify",
+        "return_url": "https://example.com/return",
+        "customer": {"email": "customer@example.com", "ip": "127.0.0.1"},
+        "sender_billing_address": {"first_name": "Sender", "country": "BY"},
+        "recipient_billing_address": {"first_name": "Recipient", "country": "BY"},
+        "billing_address": {"city": "Minsk", "zip": "220000"},
+        "additional_data": {
+            "p2p": {"type": "a2a"},
+            "referer": "https://example.com",
+            "receipt_text": ["Transfer receipt"],
+            "contract": ["recurring"],
+        },
+    }
+    if operation == "create_p2p":
+        body["description"] = "Transfer"
+        payload = {
+            "uid": "p2p-1",
+            "id": "123",
+            "status": "successful",
+            "status_code": 0,
+            "type": "p2p",
+            "amount": 100,
+            "currency": "EUR",
+            "description": "Transfer",
+            "tracking_id": "p2p-1",
+            "test": False,
+            "message": "Successfully processed",
+            "created_at": "2026-09-17T10:00:00Z",
+            "updated_at": "2026-09-17T10:00:01Z",
+            "paid_at": "2026-09-17T10:00:01Z",
+            "language": "en",
+            "payment_method_type": "credit_card",
+            "additional_data": {"unknown": {"values": [False, None, 0]}},
+            "customer": body["customer"],
+            "billing_address": body["billing_address"],
+            "sender_billing_address": body["sender_billing_address"],
+            "recipient_billing_address": body["recipient_billing_address"],
+            "credit_card": {"brand": "visa", "token": "sender-token"},
+            "recipient_card": {"brand": "visa", "token": "recipient-token"},
+            "p2p": {"status": "successful"},
+            "verify_p2p": {"status": "successful"},
+            "receipt_url": "https://example.com/receipt",
+            "redirect_url": "https://example.com/return",
+        }
+        path = "/transactions/p2ps"
+        version = "3"
+        response = {"transaction": payload}
+    else:
+        payload = {
+            "status": "error",
+            "message": "Invalid request",
+            "test": False,
+            "error_code": "request_validation_error",
+            "errors": {"recipient_card": {"number": ["is invalid"]}},
+            "required_fields": {"credit_card": ["number"], "recipient_card": []},
+        }
+        path = "/p2p-restrictions"
+        version = None
+        response = payload
+    handlers = {
+        ("POST", path): {
+            "expect_host": "gateway.bepaid.by",
+            "expect_version": version,
+            "expect_body": {"request": body},
+            "json": response,
+        }
+    }
+    return P2pRequest.model_validate(body), payload, handlers
+
+
+@pytest.mark.parametrize("operation", ["create_p2p", "verify_p2p"])
+def test_p2p_preserves_full_payload(operation: str) -> None:
+    req, payload, handlers = p2p_case(operation)
+    with client(handlers) as c:
+        response = getattr(c, operation)(req)
+    assert response.model_dump(exclude_none=True) == payload
 
 
 def test_p2p() -> None:
@@ -1678,6 +2705,412 @@ def test_erip_payments() -> None:
     assert t.uid == "ep2"
     t = c.delete_erip_payment("ep1")
     assert t.status == "deleted"
+
+
+INTEGRATION_CASES = [
+    "checkout",
+    "checkout_status",
+    "balance",
+    "payment",
+    "authorization",
+    "payment_async",
+    "authorization_async",
+    "confirm_reference",
+    "confirm_skip",
+    "confirm_empty",
+    "apm_payment",
+    "apm_refund",
+    "product",
+    "payout",
+]
+
+
+def integration_case(case: str) -> tuple:
+    method = "POST"
+    host = "gateway.bepaid.by"
+    version = "3"
+    request_id = None
+    response_type = models.Transaction
+    payload = {"uid": "integration-1", "status": "successful"}
+    response = {"transaction": payload}
+    if case in ("payment", "authorization", "payment_async", "authorization_async"):
+        operation = f"create_{case}"
+        kind = case.removesuffix("_async")
+        body = {
+            "amount": "100" if kind == "payment" else 100,
+            "currency": "BYN",
+            "test": False,
+            "description": "Integration",
+            "tracking_id": "integration-1",
+            "language": "en",
+            "notification_url": "https://example.com/notify",
+            "return_url": "https://example.com/return",
+            "expired_at": "2026-09-18T10:00:00Z",
+            "dynamic_billing_descriptor": "SHOP",
+            "additional_data": {"p2p": {"service_id": "x", "service_extension": "y"}},
+        }
+        request_type = PaymentRequest if kind == "payment" else AuthorizationRequest
+        request_id = "integration-request"
+        args = (request_type.model_validate(body), request_id)
+        path = f"/transactions/{kind}s"
+        payload = {
+            **payload,
+            "tracking_id": "integration-1",
+            "message": "Approved",
+            "credit_card": {"token": "saved-token"},
+            "code": "S.0000",
+            "redirect_url": "https://example.com/return",
+            "payment": {},
+            "three_d_secure_verification": {"status": "successful", "eci": "05"},
+        }
+        response = {"transaction": payload}
+        if case.endswith("_async"):
+            path = "/async" + path
+            response_type = models.AsyncAck
+            payload = {
+                "status": "pending",
+                "request_id": request_id,
+                "status_url": "https://gateway.bepaid.by/async/status/integration-1",
+                "response_url": "https://gateway.bepaid.by/async/response/integration-1",
+            }
+            response = payload
+        body = {"request": body}
+    elif case in ("checkout", "checkout_status"):
+        host, version = "checkout.bepaid.by", "2"
+        settings = {
+            "style": {"button": {"color": "red"}},
+            "widget_version": "2",
+            "require": {"email": True},
+            "customer": {"read_only": ["email"]},
+        }
+        body = {
+            "transaction_type": "payment",
+            "order": {"amount": 100, "currency": "BYN"},
+            "settings": settings,
+            "dynamic_billing_descriptor": "SHOP",
+            "travel": {"airline": {"ticket_number": "123"}},
+        }
+        payload = {
+            **body,
+            "token": "integration-1",
+            "customer": {"email": "test@example.com"},
+            "payment_method": {"types": ["credit_card"]},
+        }
+        operation, path = "create_checkout", "/ctp/api/checkouts"
+        args = (CheckoutRequest.model_validate(body),)
+        body = {"checkout": body}
+        response_type = models.CheckoutResponse
+        if case == "checkout_status":
+            method, version = "GET", None
+            operation, path = "get_checkout_status", path + "/integration-1"
+            args = ("integration-1",)
+            response_type = models.CheckoutStatus
+            payload.update(
+                merchant={"name": "Shop"},
+                version="2",
+                card_info={"brand": "visa"},
+                job_id="job-1",
+                attempts=0,
+                iframe=False,
+            )
+        response = {"checkout": payload}
+    elif case == "balance":
+        operation, path, version = "get_card_balance", "/balance", "2"
+        body = {"account": "account-1", "currency": "BYN", "gateway_id": 42}
+        args = (models.CardBalanceRequest.model_validate(body),)
+        body = {"request": body}
+        payload = {
+            "status": "successful",
+            "result": {
+                "gatewayId": 42,
+                "account": "account-1",
+                "amount": 0,
+                "currency": "BYN",
+                "bankInfo": {"name": "Bank"},
+            },
+        }
+        response, response_type = payload, models.CardBalanceResponse
+    elif case.startswith("confirm_"):
+        host, version = "api.bepaid.by", None
+        operation, path = (
+            "confirm_apm_payment",
+            "/beyag/transactions/integration-1/confirm",
+        )
+        fields: dict[str, bool | str] = (
+            {} if case == "confirm_empty" else {"skip_duplicate_check": False}
+        )
+        if case == "confirm_reference":
+            fields["transaction_reference"] = "receipt-1"
+        args = ("integration-1", ApmConfirmRequest.model_validate(fields))
+        body = {"request": fields}
+        payload = {"parent_uid": "integration-1", "status": "successful"}
+        response, response_type = {"response": payload}, models.ApmConfirmResponse
+    elif case == "apm_payment":
+        host, version = "api.bepaid.by", None
+        operation, path = "create_apm_payment", "/beyag/transactions/payments"
+        body = {
+            "amount": 100,
+            "currency": "BYN",
+            "payment_method": {"type": "pix"},
+            "iframe": False,
+            "verification_url": "https://example.com/verify",
+            "customer": {"id": "customer-1", "id_number": "123"},
+        }
+        args = (ApmPaymentRequest.model_validate(body),)
+        body["method"] = body.pop("payment_method")
+        body = {"request": body}
+        response_type = models.ApmPaymentResponse
+    elif case == "apm_refund":
+        host, version = "api.bepaid.by", None
+        operation, path = "apm_refund", "/beyag/transactions/refunds"
+        args = (ApmRefundRequest(parent_uid="integration-1", reason="Requested"),)
+        body = {"request": {"parent_uid": "integration-1", "reason": "Requested"}}
+        payload = {
+            **payload,
+            "tracking_id": "refund-1",
+            "updated_at": "2026-09-17T10:00:00Z",
+            "method_type": "pix",
+            "receipt_url": "https://example.com/receipt",
+            "smart_routing_verification": {"status": "successful"},
+            "additional_data": {"receipt_text": ["Refund"]},
+        }
+        response, response_type = {"transaction": payload}, models.ApmRefundResponse
+    elif case == "product":
+        method, host, version = "PUT", "api.bepaid.by", None
+        operation, path = "update_product", "/products/integration-1"
+        body = {
+            "name": "Updated",
+            "description": "Product",
+            "currency": "BYN",
+            "visible_fields": ["email"],
+            "test": False,
+            "immortal": False,
+            "expired_at": "2026-09-18T10:00:00Z",
+            "return_url": "https://example.com/return",
+            "shop_id": "363",
+            "language": "en",
+            "transaction_type": "payment",
+            "amount": 100,
+            "infinite": False,
+            "quantity": "1",
+        }
+        args = ("integration-1", ProductUpdateRequest.model_validate(body))
+        payload = response = None
+        response_type = type(None)
+    else:
+        operation, path = "create_payout", "/transactions/payouts"
+        body = {
+            "amount": 100,
+            "currency": "BYN",
+            "recipient": {},
+            "sender": {},
+            "recipient_billing_address": {},
+            "sender_billing_address": {},
+            "additional_data": {
+                "p2p": {"service_id": "x", "service_extension": "y"},
+                "sub_brand": "brand",
+                "receipt_text": ["Receipt"],
+                "card_on_file": True,
+                "expected_bank_code": "bank",
+                "excluded_gateways": [42],
+            },
+        }
+        args = (PayoutRequest.model_validate(body),)
+        body = {"request": body}
+        response_type = models.PayoutResponse
+    spec = {
+        "expect_host": host,
+        "expect_version": version,
+        "expect_request_id": request_id,
+        "json": response,
+    }
+    if method != "GET":
+        spec["expect_body"] = body
+    return operation, args, payload, response_type, {(method, path): spec}
+
+
+@pytest.mark.parametrize("case", INTEGRATION_CASES)
+def test_integration_contract(case: str) -> None:
+    operation, args, payload, response_type, handlers = integration_case(case)
+    with client(handlers) as c:
+        result = getattr(c, operation)(*args)
+    assert isinstance(result, response_type)
+    assert (
+        result.model_dump(by_alias=True, exclude_unset=True) if result else None
+    ) == payload
+
+
+def async_processing_flow() -> dict:
+    return {
+        ("GET", "/async/status/integration-1"): {
+            "expect_host": "gateway.bepaid.by",
+            "json": {
+                "status": "completed",
+                "request_id": "integration-request",
+                "response_url": "https://gateway.bepaid.by/async/response/integration-1",
+            },
+        },
+        ("GET", "/async/response/integration-1"): {
+            "expect_host": "gateway.bepaid.by",
+            "json": {
+                "transaction": {
+                    "uid": "integration-1",
+                    "status": "successful",
+                    "credit_card": {"token": "saved-token"},
+                }
+            },
+        },
+    }
+
+
+def test_async_processing_completed_flow() -> None:
+    with client(async_processing_flow()) as c:
+        status = c.get_async_status(
+            "https://gateway.bepaid.by/async/status/integration-1"
+        )
+        assert isinstance(status, models.AsyncStatus)
+        assert status.status == "completed"
+        assert status.request_id == "integration-request"
+        assert status.response_url is not None
+        result = c.get_async_result(status.response_url)
+    assert isinstance(result, models.Transaction)
+    assert result.uid == "integration-1"
+    assert result.credit_card is not None and result.credit_card.token == "saved-token"
+
+
+POLLING_INVALID_URLS = [
+    "https://other.test/async/status/1",
+    "http://gateway.test/async/status/1",
+    "https://gateway.test:8443/async/status/1",
+    "https://user:password@gateway.test/async/status/1",
+    "https://@gateway.test/async/status/1",
+    "/async/status/1",
+    "//gateway.test/async/status/1",
+    "https:///async/status/1",
+    "https://gateway.test:invalid/async/status/1",
+    "https://[invalid/async/status/1",
+    "https://gateway.test/async/status/1#fragment",
+    "https://gateway.test/async/status/with space",
+    "https://gateway.test/async/status/1\n",
+    "https://gateway.test/async\\status/1",
+]
+
+
+@pytest.mark.parametrize("operation", ["get_async_status", "get_async_result"])
+@pytest.mark.parametrize("url", POLLING_INVALID_URLS)
+def test_polling_rejects_invalid_url(operation: str, url: str) -> None:
+    with (
+        BepaidClient(
+            SHOP_ID,
+            SECRET,
+            base_gateway_url="https://gateway.test",
+            transport=MockTransport({}),
+        ) as c,
+        pytest.raises(ValueError, match="configured gateway origin"),
+    ):
+        getattr(c, operation)(url)
+
+
+@pytest.mark.parametrize("operation", ["get_async_status", "get_async_result"])
+@pytest.mark.parametrize(
+    "gateway,url",
+    [
+        ("https://gateway.test", "https://GATEWAY.test:443/async/status/1?job=1"),
+        ("https://gateway.test:8443/base", "https://gateway.test:8443/async/status/1"),
+        ("http://localhost:8080", "http://localhost:8080/async/status/1"),
+    ],
+)
+def test_polling_accepts_configured_origin(
+    operation: str, gateway: str, url: str
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["authorization"] == AUTH
+        assert request.url == httpx.URL(url)
+        return httpx.Response(
+            200, json={"status": "completed", "transaction": {"uid": "poll-1"}}
+        )
+
+    with BepaidClient(
+        SHOP_ID,
+        SECRET,
+        base_gateway_url=gateway,
+        transport=httpx.MockTransport(handler),
+    ) as c:
+        result = getattr(c, operation)(url)
+    assert (
+        result.status == "completed"
+        if operation == "get_async_status"
+        else result.uid == "poll-1"
+    )
+
+
+@pytest.mark.parametrize("operation", ["get_async_status", "get_async_result"])
+@pytest.mark.parametrize("status", [301, 302, 303, 307, 308])
+@pytest.mark.parametrize("location", ["/next", "https://other.test/next"])
+def test_polling_rejects_redirects(operation: str, status: int, location: str) -> None:
+    requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        assert len(requests) == 1
+        assert request.url == httpx.URL("https://gateway.test/async/status/1")
+        return httpx.Response(status, headers={"Location": location})
+
+    with BepaidClient(
+        SHOP_ID,
+        SECRET,
+        base_gateway_url="https://gateway.test",
+        transport=httpx.MockTransport(handler),
+    ) as c:
+        c._client().http.follow_redirects = True
+        with pytest.raises(ApiError, match="polling redirects") as exc:
+            getattr(c, operation)("https://gateway.test/async/status/1")
+        assert exc.value.status == status
+    assert len(requests) == 1
+
+
+def test_non_polling_keeps_client_redirect_setting() -> None:
+    requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if len(requests) == 1:
+            return httpx.Response(302, headers={"Location": "/next"})
+        return httpx.Response(200, json={"transaction": {"uid": "poll-1"}})
+
+    with BepaidClient(
+        SHOP_ID,
+        SECRET,
+        base_gateway_url="https://gateway.test",
+        transport=httpx.MockTransport(handler),
+    ) as c:
+        c._client().http.follow_redirects = True
+        assert c.get_transaction("poll-1").uid == "poll-1"
+    assert len(requests) == 2
+
+
+def test_integration_webhook_birth_date() -> None:
+    payload = {
+        "transaction": {
+            "uid": "integration-1",
+            "status": "successful",
+            "billing_address": {"birth_date": "1990-10-20"},
+        }
+    }
+    assert parse_webhook(json.dumps(payload)).model_dump(exclude_unset=True) == payload
+
+
+@pytest.mark.parametrize("version", [2, "2"])
+def test_checkout_status_version(version: int | str) -> None:
+    status = models.CheckoutStatus.model_validate({"version": version})
+    assert status.model_dump(exclude_unset=True) == {"version": version}
+
+
+def test_integration_optional_fields_omitted() -> None:
+    assert models.ProductUpdateRequest().model_dump(exclude_none=True) == {}
+    assert models.CheckoutSettings().model_dump(exclude_none=True) == {}
+    assert models.Customer().model_dump(exclude_none=True) == {}
+    assert models.CardBalanceRequest().model_dump(exclude_none=True) == {}
 
 
 def test_checkup() -> None:

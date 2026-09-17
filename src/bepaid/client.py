@@ -17,7 +17,7 @@ import httpx
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter
 
 from .errors import ApiError
 from .models import (
@@ -29,13 +29,16 @@ from .models import (
     ApmPayoutResponse,
     ApmRefundRequest,
     ApmRefundResponse,
+    AsyncAck,
+    AsyncStatus,
     AuthorizationRequest,
-    AuthorizationResponse,
     BalanceRequest,
     BalanceResponse,
     CancelSubscriptionRequest,
     CaptureRequest,
     CaptureResponse,
+    CardBalanceRequest,
+    CardBalanceResponse,
     ChannelBalance,
     ChargeRequest,
     CheckoutRequest,
@@ -47,10 +50,19 @@ from .models import (
     CurrencyInfo,
     CurrencyQueryRequest,
     CustomerRecord,
+    EripPayListRequest,
+    MasterpassCardResponse,
+    MasterpassDeleteCardRequest,
+    MasterpassDeleteCardResponse,
+    MasterpassGetCardRequest,
+    MasterpassGetCardsRequest,
+    MasterpassGetCardsResponse,
+    MasterpassGetSavedCardRequest,
+    MasterpassLoginRequest,
+    MasterpassLoginResponse,
     P2pRequest,
     P2pResponse,
     PaymentRequest,
-    PaymentResponse,
     PayoutRequest,
     PayoutResponse,
     PlanItem,
@@ -75,6 +87,8 @@ from .models import (
     TrackingIdStatus,
     Transaction,
     VerifyP2pResponse,
+    VisaAliasPhoneRequest,
+    VisaAliasPhoneResponse,
     VoidRequest,
     VoidResponse,
     WebhookNotification,
@@ -141,7 +155,31 @@ class AsyncBepaidClient:
         body: BaseModel | dict | None = None,
         api_version: str | None = None,
         request_id: str | None = None,
-    ) -> dict[str, Any]:
+        *,
+        polling: bool = False,
+    ) -> Any:
+        if polling:
+            try:
+                destination = httpx.URL(url)
+                gateway = httpx.URL(self._base_gateway)
+            except httpx.InvalidURL:
+                raise ValueError(
+                    "polling URL must use the configured gateway origin"
+                ) from None
+            if (
+                destination.scheme not in ("http", "https")
+                or not destination.host
+                or destination.userinfo
+                or "@" in url.partition("://")[2].split("/", 1)[0].split("?", 1)[0]
+                or any(
+                    char.isspace() or ord(char) < 32 or ord(char) == 127 for char in url
+                )
+                or "\\" in url
+                or "#" in url
+                or (destination.scheme, destination.host, destination.port)
+                != (gateway.scheme, gateway.host, gateway.port)
+            ):
+                raise ValueError("polling URL must use the configured gateway origin")
         headers = {"Authorization": self._auth}
         if api_version is not None:
             headers["X-Api-Version"] = api_version
@@ -154,13 +192,19 @@ class AsyncBepaidClient:
             json=body.model_dump(by_alias=True, exclude_none=True)
             if isinstance(body, BaseModel)
             else body,
+            follow_redirects=False if polling else self._http.follow_redirects,
         )
+        if polling and 300 <= resp.status_code < 400:
+            raise ApiError(resp.status_code, "polling redirects are not allowed")
         if resp.status_code >= 400:
             data = resp.json()
             raise ApiError(
                 status=resp.status_code,
                 message=data.get("message", resp.text),
                 errors=data.get("errors"),
+                error_code=data.get("error_code"),
+                code=data.get("code"),
+                friendly_message=data.get("friendly_message"),
             )
         if not resp.content:
             return {}
@@ -170,7 +214,7 @@ class AsyncBepaidClient:
 
     async def create_payment(
         self, req: PaymentRequest, request_id: str | None = None
-    ) -> PaymentResponse:
+    ) -> Transaction:
         data = await self._request(
             "POST",
             f"{self._base_gateway}/transactions/payments",
@@ -178,11 +222,11 @@ class AsyncBepaidClient:
             api_version="3",
             request_id=request_id,
         )
-        return PaymentResponse.model_validate(data["transaction"])
+        return Transaction.model_validate(data["transaction"])
 
     async def create_authorization(
         self, req: AuthorizationRequest, request_id: str | None = None
-    ) -> AuthorizationResponse:
+    ) -> Transaction:
         data = await self._request(
             "POST",
             f"{self._base_gateway}/transactions/authorizations",
@@ -190,7 +234,48 @@ class AsyncBepaidClient:
             api_version="3",
             request_id=request_id,
         )
-        return AuthorizationResponse.model_validate(data["transaction"])
+        return Transaction.model_validate(data["transaction"])
+
+    async def create_payment_async(
+        self, req: PaymentRequest, request_id: str | None = None
+    ) -> AsyncAck:
+        data = await self._request(
+            "POST",
+            f"{self._base_gateway}/async/transactions/payments",
+            {"request": req.model_dump(by_alias=True, exclude_none=True)},
+            api_version="3",
+            request_id=request_id,
+        )
+        return AsyncAck.model_validate(data)
+
+    async def create_authorization_async(
+        self, req: AuthorizationRequest, request_id: str | None = None
+    ) -> AsyncAck:
+        data = await self._request(
+            "POST",
+            f"{self._base_gateway}/async/transactions/authorizations",
+            {"request": req.model_dump(by_alias=True, exclude_none=True)},
+            api_version="3",
+            request_id=request_id,
+        )
+        return AsyncAck.model_validate(data)
+
+    async def get_async_status(self, url: str) -> AsyncStatus:
+        data = await self._request("GET", url, polling=True)
+        return AsyncStatus.model_validate(data)
+
+    async def get_async_result(self, url: str) -> Transaction:
+        data = await self._request("GET", url, polling=True)
+        return Transaction.model_validate(data["transaction"])
+
+    async def get_card_balance(self, req: CardBalanceRequest) -> CardBalanceResponse:
+        data = await self._request(
+            "POST",
+            f"{self._base_gateway}/balance",
+            {"request": req.model_dump(by_alias=True, exclude_none=True)},
+            api_version="2",
+        )
+        return CardBalanceResponse.model_validate(data)
 
     async def capture(
         self, req: CaptureRequest, request_id: str | None = None
@@ -301,6 +386,61 @@ class AsyncBepaidClient:
         )
         return Transaction.model_validate(data["transaction"])
 
+    async def masterpass_login(
+        self, req: MasterpassLoginRequest
+    ) -> MasterpassLoginResponse:
+        data = await self._request(
+            "POST",
+            f"{self._base_gateway}/masterpass/login",
+            req.model_dump(by_alias=True, exclude_none=True),
+            api_version="3",
+        )
+        return MasterpassLoginResponse.model_validate(data)
+
+    async def masterpass_get_cards(
+        self, req: MasterpassGetCardsRequest
+    ) -> MasterpassGetCardsResponse:
+        data = await self._request(
+            "POST",
+            f"{self._base_gateway}/masterpass/get_cards",
+            req.model_dump(by_alias=True, exclude_none=True),
+            api_version="3",
+        )
+        return MasterpassGetCardsResponse.model_validate(data)
+
+    async def masterpass_get_card(
+        self, req: MasterpassGetCardRequest
+    ) -> MasterpassCardResponse:
+        data = await self._request(
+            "POST",
+            f"{self._base_gateway}/masterpass/get_card",
+            req.model_dump(by_alias=True, exclude_none=True),
+            api_version="3",
+        )
+        return MasterpassCardResponse.model_validate(data)
+
+    async def masterpass_get_saved_card(
+        self, req: MasterpassGetSavedCardRequest
+    ) -> MasterpassCardResponse:
+        data = await self._request(
+            "POST",
+            f"{self._base_gateway}/masterpass/get_saved_card",
+            req.model_dump(by_alias=True, exclude_none=True),
+            api_version="3",
+        )
+        return MasterpassCardResponse.model_validate(data)
+
+    async def masterpass_delete_card(
+        self, req: MasterpassDeleteCardRequest
+    ) -> MasterpassDeleteCardResponse:
+        data = await self._request(
+            "POST",
+            f"{self._base_gateway}/masterpass/delete_card",
+            req.model_dump(by_alias=True, exclude_none=True),
+            api_version="3",
+        )
+        return MasterpassDeleteCardResponse.model_validate(data)
+
     # ── checkout API ───────────────────────────────────────────────────────
 
     async def create_checkout(self, req: CheckoutRequest) -> CheckoutResponse:
@@ -308,6 +448,7 @@ class AsyncBepaidClient:
             "POST",
             f"{self._base_checkout}/ctp/api/checkouts",
             {"checkout": req.model_dump(by_alias=True, exclude_none=True)},
+            api_version="2",
         )
         return CheckoutResponse.model_validate(data["checkout"])
 
@@ -340,10 +481,12 @@ class AsyncBepaidClient:
     async def create_apm_payment(
         self, req: ApmPaymentRequest, request_id: str | None = None
     ) -> ApmPaymentResponse:
+        body = req.model_dump(by_alias=True, exclude_none=True)
+        body["method"] = body.pop("payment_method")
         data = await self._request(
             "POST",
             f"{self._base_api}/beyag/transactions/payments",
-            {"request": req.model_dump(by_alias=True, exclude_none=True)},
+            {"request": body},
             request_id=request_id,
         )
         return ApmPaymentResponse.model_validate(data["transaction"])
@@ -366,6 +509,8 @@ class AsyncBepaidClient:
         amount: int | None = None,
         request_id: str | None = None,
     ) -> ApmRefundResponse:
+        if amount is None:
+            raise ValueError("amount is required for /beyag/refunds")
         req = ApmRefundRequest(parent_uid=parent_uid, reason=reason, amount=amount)
         data = await self._request(
             "POST",
@@ -378,13 +523,33 @@ class AsyncBepaidClient:
     async def confirm_apm_payment(
         self, uid: str, req: ApmConfirmRequest, request_id: str | None = None
     ) -> ApmConfirmResponse:
+        reference_mode = (
+            req.transaction_reference is not None
+            or req.skip_duplicate_check is not None
+        )
+        if (
+            sum(value is not None for value in (req.confirm_type, req.phone))
+            + reference_mode
+            > 1
+        ):
+            raise ValueError(
+                "transaction_reference/skip_duplicate_check, confirm_type and phone are mutually exclusive"
+            )
+        if req.confirm_type is not None and req.confirm_type not in (
+            "confirm",
+            "cancel",
+        ):
+            raise ValueError("confirm_type must be confirm or cancel")
+        body = req.model_dump(by_alias=True, exclude_none=True)
         data = await self._request(
             "POST",
             f"{self._base_api}/beyag/transactions/{uid}/confirm",
-            req.model_dump(by_alias=True, exclude_none=True),
+            {"request": body} if req.phone is None else body,
             request_id=request_id,
         )
-        return ApmConfirmResponse.model_validate(data["response"])
+        return ApmConfirmResponse.model_validate(
+            data["transaction" if req.confirm_type is not None else "response"]
+        )
 
     async def get_apm_transaction(self, uid: str) -> Transaction:
         data = await self._request("GET", f"{self._base_api}/beyag/transactions/{uid}")
@@ -435,6 +600,68 @@ class AsyncBepaidClient:
         )
         return CheckServiceResponse.model_validate(data)
 
+    async def check_mts_service_v2(
+        self, phone: str, test: bool | None = None
+    ) -> CheckServiceResponse:
+        request: dict[str, Any] = {"customer": {"phone": phone}}
+        if test is not None:
+            request["test"] = test
+        data = await self._request(
+            "POST",
+            f"{self._base_api}/beyag/gateways/mts_money/check_service",
+            {"request": request},
+            api_version="2",
+        )
+        return CheckServiceResponse.model_validate(data)
+
+    async def test_qiwi_terminal_payment(
+        self, amount: int, currency: str, account: str
+    ) -> dict[str, Any]:
+        return await self._request(
+            "POST",
+            f"{self._base_api}/beyag/testing/payment",
+            {
+                "request": {
+                    "amount": amount,
+                    "currency": currency,
+                    "method": {"type": "qiwi_terminal", "account": account},
+                    "test": True,
+                }
+            },
+        )
+
+    async def create_erip_payment(
+        self, req: ApmPaymentRequest, request_id: str | None = None
+    ) -> ApmPaymentResponse:
+        if req.currency != "BYN":
+            raise ValueError("currency must be BYN for ERIP")
+        if not req.description or not req.ip:
+            raise ValueError("description and ip are required for ERIP")
+        if req.payment_method.get("type") != "erip":
+            raise ValueError("payment_method.type must be erip")
+        account_number = req.payment_method.get("account_number")
+        if not isinstance(account_number, str) or not account_number:
+            raise ValueError("payment_method.account_number must be a non-empty string")
+        data = await self._request(
+            "POST",
+            f"{self._base_api}/beyag/payments",
+            {"request": req.model_dump(by_alias=True, exclude_none=True)},
+            request_id=request_id,
+        )
+        return ApmPaymentResponse.model_validate(data["transaction"])
+
+    async def get_apm_refund(self, uid: str) -> ApmRefundResponse:
+        data = await self._request("GET", f"{self._base_api}/beyag/refunds/{uid}")
+        return ApmRefundResponse.model_validate(data["transaction"])
+
+    async def get_erip_pay_list(
+        self, req: EripPayListRequest
+    ) -> dict[str, Any] | list[dict[str, Any]]:
+        data = await self._request(
+            "POST", f"{self._base_api}/beyag/gateways/komplat/get_pay_list", req
+        )
+        return TypeAdapter(dict[str, Any] | list[dict[str, Any]]).validate_python(data)
+
     async def get_erip_payment(self, uid: str) -> Transaction:
         data = await self._request("GET", f"{self._base_api}/beyag/payments/{uid}")
         return Transaction.model_validate(data["transaction"])
@@ -483,6 +710,17 @@ class AsyncBepaidClient:
             {"request": req.model_dump(by_alias=True, exclude_none=True)},
         )
         return VerifyP2pResponse.model_validate(data)
+
+    async def verify_visa_alias(
+        self, req: VisaAliasPhoneRequest
+    ) -> VisaAliasPhoneResponse:
+        data = await self._request(
+            "POST",
+            f"{self._base_gateway}/services/visa-alias/verify-phone",
+            req,
+            api_version="3",
+        )
+        return VisaAliasPhoneResponse.model_validate(data)
 
     # ── subscriptions API ──────────────────────────────────────────────────
 
@@ -723,13 +961,32 @@ class BepaidClient:
 
     def create_payment(
         self, req: PaymentRequest, request_id: str | None = None
-    ) -> PaymentResponse:
+    ) -> Transaction:
         return self._invoke("create_payment", req, request_id)
 
     def create_authorization(
         self, req: AuthorizationRequest, request_id: str | None = None
-    ) -> AuthorizationResponse:
+    ) -> Transaction:
         return self._invoke("create_authorization", req, request_id)
+
+    def create_payment_async(
+        self, req: PaymentRequest, request_id: str | None = None
+    ) -> AsyncAck:
+        return self._invoke("create_payment_async", req, request_id)
+
+    def create_authorization_async(
+        self, req: AuthorizationRequest, request_id: str | None = None
+    ) -> AsyncAck:
+        return self._invoke("create_authorization_async", req, request_id)
+
+    def get_async_status(self, url: str) -> AsyncStatus:
+        return self._invoke("get_async_status", url)
+
+    def get_async_result(self, url: str) -> Transaction:
+        return self._invoke("get_async_result", url)
+
+    def get_card_balance(self, req: CardBalanceRequest) -> CardBalanceResponse:
+        return self._invoke("get_card_balance", req)
 
     def capture(
         self, req: CaptureRequest, request_id: str | None = None
@@ -778,6 +1035,29 @@ class BepaidClient:
         self, req: TokenizationRequest, request_id: str | None = None
     ) -> Transaction:
         return self._invoke("create_tokenization", req, request_id)
+
+    def masterpass_login(self, req: MasterpassLoginRequest) -> MasterpassLoginResponse:
+        return self._invoke("masterpass_login", req)
+
+    def masterpass_get_cards(
+        self, req: MasterpassGetCardsRequest
+    ) -> MasterpassGetCardsResponse:
+        return self._invoke("masterpass_get_cards", req)
+
+    def masterpass_get_card(
+        self, req: MasterpassGetCardRequest
+    ) -> MasterpassCardResponse:
+        return self._invoke("masterpass_get_card", req)
+
+    def masterpass_get_saved_card(
+        self, req: MasterpassGetSavedCardRequest
+    ) -> MasterpassCardResponse:
+        return self._invoke("masterpass_get_saved_card", req)
+
+    def masterpass_delete_card(
+        self, req: MasterpassDeleteCardRequest
+    ) -> MasterpassDeleteCardResponse:
+        return self._invoke("masterpass_delete_card", req)
 
     # ── checkout API ───────────────────────────────────────────────────────
 
@@ -842,6 +1122,29 @@ class BepaidClient:
     ) -> CheckServiceResponse:
         return self._invoke("check_mts_service", phone, test)
 
+    def check_mts_service_v2(
+        self, phone: str, *, test: bool | None = None
+    ) -> CheckServiceResponse:
+        return self._invoke("check_mts_service_v2", phone, test)
+
+    def test_qiwi_terminal_payment(
+        self, amount: int, currency: str, account: str
+    ) -> dict[str, Any]:
+        return self._invoke("test_qiwi_terminal_payment", amount, currency, account)
+
+    def create_erip_payment(
+        self, req: ApmPaymentRequest, request_id: str | None = None
+    ) -> ApmPaymentResponse:
+        return self._invoke("create_erip_payment", req, request_id)
+
+    def get_apm_refund(self, uid: str) -> ApmRefundResponse:
+        return self._invoke("get_apm_refund", uid)
+
+    def get_erip_pay_list(
+        self, req: EripPayListRequest
+    ) -> dict[str, Any] | list[dict[str, Any]]:
+        return self._invoke("get_erip_pay_list", req)
+
     def get_erip_payment(self, uid: str) -> Transaction:
         return self._invoke("get_erip_payment", uid)
 
@@ -863,6 +1166,9 @@ class BepaidClient:
 
     def verify_p2p(self, req: P2pRequest) -> VerifyP2pResponse:
         return self._invoke("verify_p2p", req)
+
+    def verify_visa_alias(self, req: VisaAliasPhoneRequest) -> VisaAliasPhoneResponse:
+        return self._invoke("verify_visa_alias", req)
 
     # ── subscriptions API ──────────────────────────────────────────────────
 

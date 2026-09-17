@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-17
+
+### Added
+- Card balance query on the Gateway API: `get_card_balance` (async + sync) posting to `/balance` with `X-API-Version: 2` and a wrapped `{"request": ...}` body; new `CardBalanceRequest`, `CardBalanceResponse` and `CardBalanceResult` models (camelCase `gatewayId`/`bankInfo` per docs).
+- Asynchronous processing mode (Gateway API): `create_payment_async` and `create_authorization_async` post to `/async/transactions/{payments|authorizations}` (v3) and return `AsyncAck`; `get_async_status(url)` returns `AsyncStatus` and `get_async_result(url)` returns the final `Transaction`.
+- `CheckoutRequest` fields `dynamic_billing_descriptor` and `travel`; `CheckoutSettings` fields `style`, `widget_version`, `require`, `customer`.
+- `CheckoutStatus` fields `merchant`, `version` (int or str), `card_info`, `job_id`, `attempts`, `iframe`, `dynamic_billing_descriptor`, `travel`; checkout echo fields are preserved via `extra="allow"`.
+- `PaymentRequest` fields `expired_at` and `dynamic_billing_descriptor`; `AuthorizationRequest` fields `language`, `notification_url`, `return_url`, `expired_at`, `dynamic_billing_descriptor`.
+- `ApmPaymentRequest` fields `iframe` and `verification_url`; `Customer` fields `id` and `id_number`.
+- `ApmRefundResponse` fields `tracking_id`, `updated_at`, `method_type`, `receipt_url`, `smart_routing_verification`, `additional_data`.
+- `ProductUpdateRequest` fields `name`, `description`, `currency`, `visible_fields`, `test`, `immortal`, `expired_at`, `return_url`, `shop_id`, `language`, `transaction_type`.
+- `check_mts_service_v2` for the original MTS Money service check (API version 2), and `test_qiwi_terminal_payment` for QIWI terminal test payments, in both clients.
+- Optional `Customer.gender` and `Customer.street` fields, and MTS service-check `error_code`.
+- ERIP invoice creation via `create_erip_payment`, refund lookup via `get_apm_refund`, and flat ERIP tree requests via `get_erip_pay_list` in both clients; tree responses preserve bare objects and arrays.
+- `AdditionalData.komplat` for ERIP tree authorization metadata.
+- Visa Alias phone verification in both clients, with typed flat requests, root-level card data and token, and camelCase service information.
+- P2P request description, expiry, duplicate checking, language, callback URLs, customer, billing addresses and additional metadata.
+- Masterpass login, card listing, card retrieval, saved-card retrieval and deletion with typed requests/responses in both clients, flat gateway request bodies and API version 3.
+- Masterpass session metadata in `AdditionalData`, alongside recurring contracts for payments and authorizations.
+
+### Changed
+- **BREAKING**: `create_payment` and `create_authorization` return the full `Transaction` model instead of the narrow `PaymentResponse`/`AuthorizationResponse` classes, which are removed. 3-D Secure data is available via `Transaction.three_d_secure_verification` (dict), card data via `Transaction.credit_card`.
+- **BREAKING**: `ThreeDSecureVerification` is removed; use the raw `Transaction.three_d_secure_verification` dictionary. `apm_full_refund` now requires an explicit amount, and mixed APM confirmation modes raise `ValueError`.
+- `AdditionalData` and `PayoutAdditionalData` accept unknown keys (`extra="allow"`), so `p2p{service_id,service_extension}`, `sub_brand`, `receipt_text`, `card_on_file`, `expected_bank_code`, `excluded_gateways` pass through to the API (AFT/OCT support).
+- `BillingAddress` gains `birth_date` (kept in webhook transactions).
+
+### Fixed
+- `create_checkout` now sends the required `X-API-Version: 2` header.
+- Universal APM confirmation (transaction_reference / skip_duplicate_check) sends a wrapped `{"request": {...}}` body as documented; empty `ApmConfirmRequest()` sends `{"request": {}}`, and `skip_duplicate_check` may be sent without `transaction_reference`. Wrapped BelVEB confirm/cancel and flat SberPay phone modes are unchanged.
+- Async polling accepts only absolute URLs on the configured gateway origin, rejects userinfo and malformed/foreign destinations before HTTP, and never follows redirects, even when the underlying client enables them.
+- Generic APM payment creation sends `method` while preserving public `payment_method` construction and ERIP invoice serialization.
+- APM payment and transaction-status responses preserve method-specific JSON and object/string forms, including string cryptocurrency amounts.
+- APM confirmation supports wrapped BelVEB confirm/cancel and flat SberPay phone requests, preserves the legacy reference flow, and rejects mixed confirmation modes.
+- ERIP/APM payment and refund responses preserve documented metadata, raw ERIP details, QR codes and bank links; transactions preserve billing addresses and middle names.
+- Webhooks retain ERIP/refund metadata and method-named External/APM objects; widget payment methods and order additional data retain method-specific sections.
+- `create_erip_payment` validates ERIP currency and required fields without changing generic APM creation; `apm_full_refund` rejects omitted or `None` amounts before sending a request, while generic `apm_refund` remains unchanged.
+- P2P responses preserve message, timestamps, language, payment method, additional data, customer, billing address, status code and ID; restriction responses preserve structured errors without changing the request envelope.
+- `ApiError` preserves structured messages and errors plus `error_code`, `code` and `friendly_message`, including Visa Alias validation and card-not-found errors.
+- Responses of payment, authorization, charge and tokenization calls preserve raw `additional_data`, including nested Masterpass results independently of transaction status.
+- `CreditCardRaw.number` is optional, allowing token-only payments without dummy card fields; raw-card serialization is unchanged.
+- `AuthorizationRequest.additional_data` accepts `AdditionalData`, including `contract`, and preserves it in request bodies.
+
 ## [0.5.12] - 2026-09-17
 
 ### Added
@@ -215,7 +257,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Direct (APM) API: `create_apm_payment`, `apm_refund`, `apm_full_refund`.
 - Webhooks: `verify_webhook_auth` and `WebhookNotification` parsing.
 
-[Unreleased]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.12...HEAD
+[Unreleased]: https://github.com/amnesiaof/bepaid-py/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.12...v0.6.0
 [0.5.12]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.11...v0.5.12
 [0.5.11]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.10...v0.5.11
 [0.5.10]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.9...v0.5.10

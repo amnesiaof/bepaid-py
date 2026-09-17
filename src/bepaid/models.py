@@ -13,6 +13,7 @@ class CamelModel(BaseModel):
 
 class BillingAddress(CamelModel):
     first_name: str | None = None
+    middle_name: str | None = None
     last_name: str | None = None
     country: str | None = None
     city: str | None = None
@@ -20,9 +21,11 @@ class BillingAddress(CamelModel):
     zip: str | None = None
     address: str | None = None
     phone: str | None = None
+    birth_date: str | None = None
 
 
 class Customer(CamelModel):
+    id: str | None = None
     first_name: str | None = None
     last_name: str | None = None
     middle_name: str | None = None
@@ -30,6 +33,8 @@ class Customer(CamelModel):
     email: str | None = None
     device_id: str | None = None
     birth_date: str | None = None
+    gender: str | None = None
+    street: str | None = None
     phone: str | None = None
     external_id: str | None = None
     taxpayer_id: str | None = None
@@ -38,6 +43,7 @@ class Customer(CamelModel):
     city: str | None = None
     state: str | None = None
     zip: str | None = None
+    id_number: str | None = None
 
 
 class BrowserInfo(CamelModel):
@@ -54,14 +60,26 @@ class BrowserInfo(CamelModel):
     window_width: int | None = None
 
 
+class MasterpassParams(CamelModel):
+    session: str | None = None
+
+
+class MasterpassData(CamelModel):
+    params: MasterpassParams | None = None
+
+
 class AdditionalData(CamelModel):
+    model_config = ConfigDict(extra="allow")
+
     browser: BrowserInfo | None = None
     contract: list[str] | None = None
     referer: str | None = None
+    masterpass: MasterpassData | None = None
+    komplat: dict[str, Any] | None = None
 
 
 class CreditCardRaw(CamelModel):
-    number: str
+    number: str | None = None
     verification_value: str | None = None
     holder: str | None = None
     exp_month: int | None = None
@@ -89,6 +107,29 @@ class CreditCardInfo(CamelModel):
     token: str | None = None
 
 
+class VisaAliasServiceInfo(CamelModel):
+    recipient_name: str | None = Field(default=None, alias="recipientName")
+    issuer_name: str | None = Field(default=None, alias="issuerName")
+    card_type: str | None = Field(default=None, alias="cardType")
+    address1: str | None = None
+    address2: str | None = None
+    city: str | None = None
+    country: str | None = None
+    postal_code: str | None = Field(default=None, alias="postalCode")
+
+
+class VisaAliasRecipientInfo(CamelModel):
+    phone_number: str
+
+
+class VisaAliasPhoneRequest(CamelModel):
+    recipient_info: VisaAliasRecipientInfo
+
+
+class VisaAliasPhoneResponse(CreditCardInfo):
+    service_info: VisaAliasServiceInfo | None = None
+
+
 class PaymentInfo(CamelModel):
     auth_code: str | None = None
     bank_code: str | None = None
@@ -100,13 +141,6 @@ class PaymentInfo(CamelModel):
     billing_descriptor: str | None = None
     gateway_id: int | None = None
     status: str | None = None
-
-
-class ThreeDSecureVerification(CamelModel):
-    status: str | None = None
-    message: str | None = None
-    pa_res_url: str | None = None
-    eci: str | None = None
 
 
 # ── gateway ───────────────────────────────────────────────────────────────────
@@ -163,6 +197,8 @@ class PaymentRequest(CamelModel):
     verification_url: str | None = None
     return_url: str | None = None
     duplicate_check: bool | None = None
+    expired_at: str | None = None
+    dynamic_billing_descriptor: str | None = None
     billing_address: BillingAddress | None = None
     credit_card: CreditCardRaw | None = None
     customer: Customer | None = None
@@ -170,11 +206,6 @@ class PaymentRequest(CamelModel):
     encrypted_data: str | None = None
     fiscalization: Fiscalization | None = None
     custom_fields: CustomFields | None = None
-
-
-class PaymentResponse(CamelModel):
-    tracking_id: str | None = None
-    uid: str
 
 
 class AuthorizationRequest(CamelModel):
@@ -185,21 +216,26 @@ class AuthorizationRequest(CamelModel):
     payment_method_type: str | None = None
     test: bool | None = None
     duplicate_check: bool | None = None
+    language: str | None = None
+    notification_url: str | None = None
+    return_url: str | None = None
+    expired_at: str | None = None
+    dynamic_billing_descriptor: str | None = None
     credit_card: CreditCardRaw | None = None
     customer: Customer | None = None
     billing_address: BillingAddress | None = None
+    additional_data: AdditionalData | None = None
     verification_url: str | None = None
     custom_fields: CustomFields | None = None
 
 
-class AuthorizationResponse(CamelModel):
-    uid: str
-    status: str | None = None
-    redirect_url: str | None = None
-    three_d_secure_verification: ThreeDSecureVerification | None = None
+class _ApmResult(CamelModel):
+    model_config = ConfigDict(extra="allow")
+
+    form: dict[str, Any] | str | None = None
 
 
-class Transaction(CamelModel):
+class Transaction(_ApmResult):
     uid: str
     status: str | None = None
     amount: int | None = None
@@ -236,11 +272,44 @@ class Transaction(CamelModel):
     parent_uid: str | None = None
     reason: str | None = None
     customer: Customer | None = None
+    billing_address: BillingAddress | None = None
     smart_routing_verification: dict[str, Any] | None = None
     three_d_secure_verification: dict[str, Any] | None = None
     additional_data: dict[str, Any] | None = None
     avs_cvc_verification: dict[str, Any] | None = None
     errors: dict[str, Any] | None = None
+
+
+class AsyncAck(CamelModel):
+    status: str | None = None
+    request_id: str | None = None
+    status_url: str | None = None
+    response_url: str | None = None
+
+
+class AsyncStatus(CamelModel):
+    status: str | None = None
+    request_id: str | None = None
+    response_url: str | None = None
+
+
+class CardBalanceRequest(BaseModel):
+    account: str | None = None
+    currency: str | None = None
+    gateway_id: int | None = None
+
+
+class CardBalanceResult(CamelModel):
+    gateway_id: int | None = Field(default=None, alias="gatewayId")
+    account: str | None = None
+    amount: int | None = None
+    currency: str | None = None
+    bank_info: dict[str, Any] | None = Field(default=None, alias="bankInfo")
+
+
+class CardBalanceResponse(CamelModel):
+    status: str | None = None
+    result: CardBalanceResult | None = None
 
 
 class ThreeDSecureAdvanced(CamelModel):
@@ -394,9 +463,15 @@ class CheckoutSettings(BaseModel):
     card_notification_url: str | None = None
     save_card_toggle: SaveCardToggle | None = None
     another_card_toggle: AnotherCardToggle | None = None
+    style: dict[str, Any] | None = None
+    widget_version: str | None = None
+    require: dict[str, Any] | None = None
+    customer: dict[str, Any] | None = None
 
 
 class PaymentMethod(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     types: list[str] | None = None
     excluded_types: list[str] | None = None
     excluded_brands: list[str] | None = None
@@ -407,6 +482,8 @@ class CheckoutCreditCard(BaseModel):
 
 
 class CheckoutOrderAdditionalData(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     contract: list[str] | None = None
 
 
@@ -430,14 +507,20 @@ class CheckoutRequest(BaseModel):
     credit_card: CheckoutCreditCard | None = None
     order: CheckoutOrder
     customer: Customer | None = None
+    dynamic_billing_descriptor: str | None = None
+    travel: dict[str, Any] | None = None
 
 
 class CheckoutResponse(CamelModel):
+    model_config = ConfigDict(extra="allow")
+
     token: str
     redirect_url: str | None = None
 
 
 class CheckoutStatus(CamelModel):
+    model_config = ConfigDict(extra="allow")
+
     token: str | None = None
     shop_id: int | None = None
     transaction_type: str | None = None
@@ -452,6 +535,14 @@ class CheckoutStatus(CamelModel):
     status: str | None = None
     message: str | None = None
     payment_method: dict[str, Any] | None = None
+    merchant: dict[str, Any] | None = None
+    version: Any | None = None
+    card_info: dict[str, Any] | None = None
+    job_id: str | None = None
+    attempts: int | None = None
+    iframe: bool | None = None
+    dynamic_billing_descriptor: str | None = None
+    travel: dict[str, Any] | None = None
 
 
 # ── direct / APM API ──────────────────────────────────────────────────────────
@@ -463,6 +554,16 @@ class EripDevice(CamelModel):
     rank: str
     value: str
     rate: str
+
+
+class EripPayListRequest(CamelModel):
+    terminal_id: str
+    pay_code: str
+    di_type: str
+    test: bool | None = None
+    erip_session_id: str | None = None
+    attributes: dict[str, Any] | None = None
+    customer: dict[str, str] | None = None
 
 
 class ApmPaymentRequest(CamelModel):
@@ -481,6 +582,8 @@ class ApmPaymentRequest(CamelModel):
     return_url: str | None = None
     customer: Customer | None = None
     payment_method: dict[str, Any]
+    iframe: bool | None = None
+    verification_url: str | None = None
     additional_data: dict[str, Any] | None = None
     custom_fields: CustomFields | None = None
 
@@ -580,7 +683,7 @@ class ApmPaymentRequest(CamelModel):
         return cls._simple("halva", amount, currency)
 
 
-class ApmPaymentResponse(CamelModel):
+class ApmPaymentResponse(_ApmResult):
     uid: str | None = None
     status: str | None = None
     type: str | None = None
@@ -594,6 +697,25 @@ class ApmPaymentResponse(CamelModel):
     payment: PaymentInfo | None = None
     created_at: str | None = None
     custom_fields: CustomFields | None = None
+    description: str | None = None
+    erip: dict[str, Any] | None = None
+    payment_method_type: str | None = None
+    id: str | None = None
+    order_id: str | None = None
+    expired_at: str | None = None
+    paid_at: str | None = None
+    updated_at: str | None = None
+    closed_at: str | None = None
+    settled_at: str | None = None
+    psp_settled_at: str | None = None
+    registry_id: str | int | None = None
+    manually_corrected_at: str | None = None
+    language: str | None = None
+    version: int | None = None
+    customer: Customer | None = None
+    billing_address: BillingAddress | None = None
+    additional_data: dict[str, Any] | None = None
+    smart_routing_verification: dict[str, Any] | None = None
 
 
 class ApmRefundRequest(CamelModel):
@@ -613,12 +735,31 @@ class ApmRefundResponse(CamelModel):
     amount: int | None = None
     currency: str | None = None
     refund: dict[str, Any] | None = None
+    id: str | None = None
+    reason: str | None = None
+    paid_at: str | None = None
+    language: str | None = None
+    version: int | None = None
+    created_at: str | None = None
+    test: bool | None = None
+    settled_at: str | None = None
+    psp_settled_at: str | None = None
+    registry_id: str | int | None = None
+    payment_method_type: str | None = None
+    erip: dict[str, Any] | None = None
+    tracking_id: str | None = None
+    updated_at: str | None = None
+    method_type: str | None = None
+    receipt_url: str | None = None
+    smart_routing_verification: dict[str, Any] | None = None
+    additional_data: dict[str, Any] | None = None
 
 
 class ApmConfirmRequest(CamelModel):
     confirm_type: str | None = None
     skip_duplicate_check: bool | None = None
-    transaction_reference: str
+    transaction_reference: str | None = None
+    phone: str | None = None
 
 
 class ApmConfirmResponse(CamelModel):
@@ -648,6 +789,7 @@ class CheckServiceResponse(BaseModel):
     service_activated: bool | None = None
     message: str | None = None
     validation: CheckServiceValidation | None = None
+    error_code: str | int | None = None
 
 
 # ── APM payout ────────────────────────────────────────────────────────────────
@@ -742,15 +884,28 @@ class P2pInfo(CamelModel):
 
 class P2pAdditionalData(CamelModel):
     p2p: P2pInfo | None = None
+    referer: str | None = None
+    receipt_text: list[str] | None = None
+    contract: list[str] | None = None
 
 
 class P2pRequest(CamelModel):
     amount: int
     currency: str
+    description: str | None = None
     credit_card: P2pCard
     recipient_card: P2pCard
     test: bool | None = None
     tracking_id: str | None = None
+    expired_at: str | None = None
+    duplicate_check: bool | None = None
+    language: str | None = None
+    notification_url: str | None = None
+    return_url: str | None = None
+    customer: Customer | None = None
+    sender_billing_address: BillingAddress | None = None
+    recipient_billing_address: BillingAddress | None = None
+    billing_address: BillingAddress | None = None
     additional_data: P2pAdditionalData | None = None
 
 
@@ -775,6 +930,7 @@ class VerifyP2pResponse(CamelModel):
     test: bool | None = None
     error_code: str | None = None
     required_fields: P2pRequiredFields | None = None
+    errors: dict[str, Any] | None = None
 
 
 class P2pResponse(CamelModel):
@@ -795,6 +951,16 @@ class P2pResponse(CamelModel):
     p2p: dict[str, Any] | None = None
     sender_billing_address: BillingAddress | None = None
     recipient_billing_address: BillingAddress | None = None
+    message: str | None = None
+    updated_at: str | None = None
+    paid_at: str | None = None
+    language: str | None = None
+    payment_method_type: str | None = None
+    additional_data: dict[str, Any] | None = None
+    customer: Customer | None = None
+    billing_address: BillingAddress | None = None
+    status_code: int | None = None
+    id: str | None = None
 
 
 # ── subscriptions API (api.bepaid.by) ────────────────────────────────────────
@@ -921,6 +1087,23 @@ class WebhookNotification(CamelModel):
 
 
 class WebhookTransaction(CamelModel):
+    model_config = ConfigDict(extra="allow")
+
+    erip: dict[str, Any] | None = None
+    payment_method_type: str | None = None
+    id: str | None = None
+    order_id: str | None = None
+    expired_at: str | None = None
+    parent_uid: str | None = None
+    reason: str | None = None
+    refund: dict[str, Any] | None = None
+    version: int | None = None
+    customer: Customer | None = None
+    billing_address: BillingAddress | None = None
+    additional_data: dict[str, Any] | None = None
+    language: str | None = None
+    paid_at: str | None = None
+    updated_at: str | None = None
     uid: str
     status: str
     type: str | None = None
@@ -951,6 +1134,8 @@ class PayoutDocument(BaseModel):
 
 
 class PayoutAdditionalData(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     document: PayoutDocument | None = None
 
 
@@ -1202,6 +1387,17 @@ class ProductUpdateRequest(BaseModel):
     amount: int | None = None
     infinite: bool | None = None
     quantity: str | None = None
+    name: str | None = None
+    description: str | None = None
+    currency: str | None = None
+    visible_fields: list[str] | None = None
+    test: bool | None = None
+    immortal: bool | None = None
+    expired_at: str | None = None
+    return_url: str | None = None
+    shop_id: str | None = None
+    language: str | None = None
+    transaction_type: str | None = None
 
 
 class Product(CamelModel):
@@ -1306,6 +1502,87 @@ class TrackingIdStatus(CamelModel):
     cvc_verification: TrackingCvcVerification | None = None
     customer: Customer | None = None
     billing_address: BillingAddress | None = None
+
+
+class MasterpassCardEntry(CamelModel):
+    card_holder: str | None = None
+    token: str | None = None
+    date: str | None = None
+    expiry_date: str | None = None
+    pan_mask: str | None = None
+    card_status: int | None = None
+    is_recurring: bool | None = None
+    card_name: str | None = None
+    comment1: str | None = None
+    comment2: str | None = None
+    comment3: str | None = None
+
+
+class MasterpassLoginRequest(CamelModel):
+    phone: str
+    fingerprint: str
+    phone_check_date: str | None = None
+    channel: int | None = None
+    test: bool | None = None
+
+
+class MasterpassLoginResponse(CamelModel):
+    status: str | None = None
+    error_code: int | None = None
+    error: str | None = None
+    is_otp_required: bool | None = None
+    session: str | None = None
+    user_status: int | None = None
+
+
+class MasterpassGetCardsRequest(CamelModel):
+    session: str
+    test: bool | None = None
+
+
+class MasterpassGetCardsResponse(CamelModel):
+    status: str | None = None
+    error_code: int | None = None
+    error: str | None = None
+    card_list: list[MasterpassCardEntry] | None = None
+
+
+class MasterpassGetCardRequest(CamelModel):
+    session: str | None = None
+    token: str
+    amount: int
+    currency: str
+    test: bool | None = None
+
+
+class MasterpassGetSavedCardRequest(CamelModel):
+    session: str | None = None
+    credit_card_token: str
+    amount: int
+    currency: str
+    test: bool | None = None
+
+
+class MasterpassCardResponse(CamelModel):
+    status: str | None = None
+    error_code: int | None = None
+    error: str | None = None
+    message: str | None = None
+    credit_card: CreditCardInfo | None = None
+    recommendation: int | None = None
+    required: int | None = None
+
+
+class MasterpassDeleteCardRequest(CamelModel):
+    session: str
+    token: str
+    test: bool | None = None
+
+
+class MasterpassDeleteCardResponse(CamelModel):
+    status: str | None = None
+    error_code: int | None = None
+    error: str | None = None
 
 
 WebhookNotification.model_rebuild()

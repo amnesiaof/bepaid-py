@@ -3,9 +3,27 @@
 from __future__ import annotations
 
 import pytest
-from test_client import async_client
+from test_client import (
+    APM_BATCH7_CASES,
+    ERIP_CASES,
+    INTEGRATION_CASES,
+    MASTERPASS_CASES,
+    POLLING_INVALID_URLS,
+    VISA_ALIAS_ERRORS,
+    VISA_ALIAS_SUCCESS,
+    MockTransport,
+    apm_batch7_case,
+    async_client,
+    async_processing_flow,
+    erip_case,
+    integration_case,
+    masterpass_case,
+    masterpass_transaction_case,
+    p2p_case,
+    visa_alias_case,
+)
 
-from bepaid import BepaidError
+from bepaid import AsyncBepaidClient, BepaidError, models
 from bepaid.errors import ApiError
 from bepaid.models import (
     ApmPaymentRequest,
@@ -36,6 +54,127 @@ from bepaid.models import (
     SplitPaymentRequest,
     SubscriptionCreateRequest,
 )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case", MASTERPASS_CASES, ids=[c[0] for c in MASTERPASS_CASES])
+@pytest.mark.parametrize("with_options", [False, True])
+@pytest.mark.parametrize("outcome", ["success", "error", "empty"])
+async def test_async_masterpass(case: tuple, with_options: bool, outcome: str) -> None:
+    req, response_type, payload, handlers = masterpass_case(case, with_options, outcome)
+    async with async_client(handlers) as c:
+        response = await getattr(c, f"masterpass_{case[0]}")(req)
+    assert isinstance(response, response_type)
+    assert response.model_dump(exclude_none=True) == payload
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case", MASTERPASS_CASES, ids=[c[0] for c in MASTERPASS_CASES])
+async def test_async_masterpass_http_error(case: tuple) -> None:
+    req, _, _, handlers = masterpass_case(case, False, "error")
+    spec = handlers[("POST", f"/masterpass/{case[0]}")]
+    spec.update(status=400, json={"message": "Invalid request"})
+    async with async_client(handlers) as c:
+        with pytest.raises(ApiError) as exc:
+            await getattr(c, f"masterpass_{case[0]}")(req)
+    assert exc.value.status == 400
+    assert exc.value.message == "Invalid request"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["payment", "authorization"])
+@pytest.mark.parametrize("status", ["successful", "failed"])
+@pytest.mark.parametrize("result_status", ["successful", "failed"])
+async def test_async_masterpass_transaction_metadata(
+    operation: str, status: str, result_status: str
+) -> None:
+    req, response_type, additional_data, handlers = masterpass_transaction_case(
+        operation, status, result_status
+    )
+    async with async_client(handlers) as c:
+        response = await getattr(c, f"create_{operation}")(req)
+    assert isinstance(response, response_type)
+    assert response.additional_data == additional_data
+    assert response.model_dump()["additional_data"] == additional_data
+    assert response.status == status
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case", ERIP_CASES)
+async def test_async_erip_contract(case: str) -> None:
+    operation, args, payload, response_type, handlers = erip_case(case)
+    async with async_client(handlers) as c:
+        response = await getattr(c, operation)(*args)
+    assert isinstance(response, response_type)
+    assert (
+        response
+        if isinstance(response, (dict, list))
+        else response.model_dump(exclude_unset=True)
+    ) == payload
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case", INTEGRATION_CASES)
+async def test_async_integration_contract(case: str) -> None:
+    operation, args, payload, response_type, handlers = integration_case(case)
+    async with async_client(handlers) as c:
+        result = await getattr(c, operation)(*args)
+    assert isinstance(result, response_type)
+    assert (
+        result.model_dump(by_alias=True, exclude_unset=True) if result else None
+    ) == payload
+
+
+@pytest.mark.asyncio
+async def test_async_processing_completed_flow() -> None:
+    async with async_client(async_processing_flow()) as c:
+        status = await c.get_async_status(
+            "https://gateway.bepaid.by/async/status/integration-1"
+        )
+        assert isinstance(status, models.AsyncStatus)
+        assert status.status == "completed"
+        assert status.response_url is not None
+        result = await c.get_async_result(status.response_url)
+    assert isinstance(result, models.Transaction)
+    assert result.uid == "integration-1"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["get_async_status", "get_async_result"])
+@pytest.mark.parametrize("url", POLLING_INVALID_URLS)
+async def test_async_polling_rejects_invalid_url(operation: str, url: str) -> None:
+    async with AsyncBepaidClient(
+        "test-shop",
+        "test-secret",
+        base_gateway_url="https://gateway.test",
+        transport=MockTransport({}),
+    ) as c:
+        with pytest.raises(ValueError, match="configured gateway origin"):
+            await getattr(c, operation)(url)
+
+
+@pytest.mark.asyncio
+async def test_async_erip_refund_requires_amount() -> None:
+    async with async_client({}) as c:
+        with pytest.raises(ValueError, match="amount"):
+            await c.apm_full_refund("erip-1", "Client request")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case", APM_BATCH7_CASES)
+async def test_async_apm_batch7_contract(case: str) -> None:
+    operation, args, kwargs, payload, handlers = apm_batch7_case(case)
+    async with async_client(handlers) as c:
+        if case == "qiwi_error":
+            with pytest.raises(ApiError) as exc:
+                await getattr(c, operation)(*args, **kwargs)
+            assert exc.value.status == 400
+            assert exc.value.message == payload["message"]
+            return
+        result = await getattr(c, operation)(*args, **kwargs)
+    assert (
+        result if isinstance(result, dict) else result.model_dump(exclude_unset=True)
+    ) == payload
 
 
 def _payment_request() -> PaymentRequest:
@@ -278,6 +417,43 @@ async def test_async_recipient_tokenization_and_apple_pay() -> None:
 @pytest.mark.asyncio
 async def test_async_errors_baseclass() -> None:
     assert issubclass(ApiError, BepaidError)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["create_p2p", "verify_p2p"])
+async def test_async_p2p_preserves_full_payload(operation: str) -> None:
+    req, payload, handlers = p2p_case(operation)
+    async with async_client(handlers) as c:
+        response = await getattr(c, operation)(req)
+    assert response.model_dump(exclude_none=True) == payload
+
+
+@pytest.mark.asyncio
+async def test_async_visa_alias_success() -> None:
+    req, handlers = visa_alias_case(VISA_ALIAS_SUCCESS)
+    async with async_client(handlers) as c:
+        response = await c.verify_visa_alias(req)
+    assert isinstance(response, models.VisaAliasPhoneResponse)
+    assert isinstance(response, models.CreditCardInfo)
+    assert response.token == "visa-alias-token"
+    assert response.service_info is not None
+    assert response.service_info.issuer_name == "Test Bank"
+    assert response.model_dump(by_alias=True, exclude_none=True) == VISA_ALIAS_SUCCESS
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status,payload", VISA_ALIAS_ERRORS)
+async def test_async_visa_alias_http_error(status: int, payload: dict) -> None:
+    req, handlers = visa_alias_case(payload, status)
+    async with async_client(handlers) as c:
+        with pytest.raises(ApiError) as exc:
+            await c.verify_visa_alias(req)
+    assert exc.value.status == status
+    assert exc.value.message == payload["message"]
+    assert exc.value.errors == payload.get("errors")
+    assert exc.value.error_code == payload.get("error_code")
+    assert exc.value.code == payload["code"]
+    assert exc.value.friendly_message == payload["friendly_message"]
 
 
 @pytest.mark.asyncio

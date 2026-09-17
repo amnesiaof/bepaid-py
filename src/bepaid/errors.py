@@ -12,8 +12,11 @@ class ApiError(BepaidError):
     """An error response returned by the bePaid API."""
 
     status: int
-    message: str
+    message: str | dict
     errors: dict | None = None
+    error_code: str | int | None = None
+    code: str | None = None
+    friendly_message: str | None = None
 
     def __str__(self) -> str:
         return f"API error {self.status}: {self.message}"
