@@ -5,6 +5,21 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-09-21
+
+### Added
+- Provider card update: `update_token(token, UpdateTokenRequest(holder, exp_month, exp_year))` (async + sync) posting to `POST /credit_cards/{token}` with `X-API-Version: 3` and returning the flat `TokenResponse`.
+- Client-side encryption: `EncryptedCreditCard` (number, holder, exp_month, exp_year, verification_value) on `PaymentRequest`, `AuthorizationRequest` and `TokenizationRequest`, plus `EncryptedRecipientCreditCard` on `RecipientTokenizationRequest`.
+- Card-art notifications: `CreditCardRaw.notification_url`, `CreditCardInfo.image`, and `parse_card_notification(body)` returning the flat `CardNotification` webhook payload.
+- Antifraud: `three_d_secure` (`ThreeDSecureAdvanced.advanced`) on `PaymentRequest` and `AuthorizationRequest`, and typed `Transaction.conversion` (`Conversion`: converted_amount, converted_currency, exchange_rate, exchange_rate_ids, exchange_rate_date).
+- Travel data as typed `Travel`/`TravelAirline`/`TravelAirlineLeg`/`TravelPassenger` on `PaymentRequest`, `AuthorizationRequest`, `ChargeRequest`, `TokenizationRequest` and `CheckoutRequest`.
+- `dynamic_billing_descriptor` on `ProductCreateRequest` and `ProductUpdateRequest`.
+- `ChargeAdditionalData` now preserves unknown keys (e.g. `kyc_answers`, `customer_id_data`) instead of dropping them.
+
+### Changed
+- `RecipientTokenizationRequest.recipient_credit_card` is now optional (mutually exclusive with the new `encrypted_recipient_credit_card`).
+- `PaymentRequest`, `AuthorizationRequest` and `ChargeRequest` gained new optional fields; `TokenizationRequest.travel` and `CheckoutRequest.travel` are now typed `Travel` instead of a plain dict.
+
 ## [0.7.0] - 2026-09-21
 
 ### Added
@@ -263,7 +278,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Direct (APM) API: `create_apm_payment`, `apm_refund`, `apm_full_refund`.
 - Webhooks: `verify_webhook_auth` and `WebhookNotification` parsing.
 
-[Unreleased]: https://github.com/amnesiaof/bepaid-py/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/amnesiaof/bepaid-py/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/amnesiaof/bepaid-py/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/amnesiaof/bepaid-py/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.12...v0.6.0
 [0.5.12]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.11...v0.5.12

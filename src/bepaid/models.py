@@ -89,6 +89,7 @@ class CreditCardRaw(CamelModel):
     token: str | None = None
     skip_three_d_secure_verification: bool | None = None
     force_three_d_secure_verification: bool | None = None
+    notification_url: str | None = None
 
 
 class CreditCardInfo(CamelModel):
@@ -106,6 +107,11 @@ class CreditCardInfo(CamelModel):
     exp_year: int | None = None
     token_provider: str | None = None
     token: str | None = None
+    image: str | None = None
+
+
+class CardNotification(CreditCardInfo):
+    pass
 
 
 class VisaAliasServiceInfo(CamelModel):
@@ -231,6 +237,56 @@ class CustomFields(BaseModel):
     custom_field_3: CustomField | None = None
 
 
+class EncryptedCreditCard(CamelModel):
+    number: str | None = None
+    holder: str | None = None
+    exp_month: str | None = None
+    exp_year: str | None = None
+    verification_value: str | None = None
+
+
+class EncryptedRecipientCreditCard(CamelModel):
+    number: str | None = None
+    holder: str | None = None
+    exp_month: str | None = None
+    exp_year: str | None = None
+
+
+class TravelAirlineLeg(CamelModel):
+    airline_code: str | None = None
+    stop_over_code: str | None = None
+    flight_number: str | None = None
+    departure_date_time: str | None = None
+    arrival_date_time: str | None = None
+    originating_country: str | None = None
+    originating_city: str | None = None
+    originating_airport_code: str | None = None
+    destination_country: str | None = None
+    destination_city: str | None = None
+    destination_airport_code: str | None = None
+    coupon: str | None = None
+    travel_class: str | None = Field(default=None, alias="class")
+
+
+class TravelPassenger(CamelModel):
+    first_name: str | None = None
+    last_name: str | None = None
+
+
+class TravelAirline(CamelModel):
+    agency_code: str | None = None
+    agency_name: str | None = None
+    ticket_number: str | None = None
+    booking_number: str | None = None
+    restricted_ticket_indicator: str | None = None
+    legs: list[TravelAirlineLeg] | None = None
+    passengers: list[TravelPassenger] | None = None
+
+
+class Travel(CamelModel):
+    airline: TravelAirline | None = None
+
+
 class PaymentRequest(CamelModel):
     amount: str
     currency: str
@@ -249,6 +305,9 @@ class PaymentRequest(CamelModel):
     customer: Customer | None = None
     additional_data: AdditionalData | None = None
     encrypted_data: str | None = None
+    encrypted_credit_card: EncryptedCreditCard | None = None
+    three_d_secure: ThreeDSecureAdvanced | None = None
+    travel: Travel | None = None
     fiscalization: Fiscalization | None = None
     custom_fields: CustomFields | None = None
 
@@ -271,6 +330,9 @@ class AuthorizationRequest(CamelModel):
     billing_address: BillingAddress | None = None
     additional_data: AdditionalData | None = None
     verification_url: str | None = None
+    encrypted_credit_card: EncryptedCreditCard | None = None
+    three_d_secure: ThreeDSecureAdvanced | None = None
+    travel: Travel | None = None
     custom_fields: CustomFields | None = None
 
 
@@ -324,6 +386,15 @@ class Transaction(_ApmResult):
     avs_cvc_verification: dict[str, Any] | None = None
     fiscalization: FiscalizationInfo | None = None
     errors: dict[str, Any] | None = None
+    conversion: Conversion | None = None
+
+
+class Conversion(CamelModel):
+    converted_amount: int | None = None
+    converted_currency: str | None = None
+    exchange_rate: dict[str, float] | None = None
+    exchange_rate_ids: list[str] | None = None
+    exchange_rate_date: str | None = None
 
 
 class AsyncAck(CamelModel):
@@ -377,7 +448,7 @@ class TokenizationRequest(CamelModel):
     billing_address: BillingAddress | None = None
     credit_card: CreditCardRaw | None = None
     three_d_secure: ThreeDSecureAdvanced | None = None
-    travel: dict[str, Any] | None = None
+    travel: Travel | None = None
     customer: Customer | None = None
     additional_data: AdditionalData | None = None
 
@@ -458,6 +529,12 @@ class TokenResponse(CamelModel):
     token: str | None = None
     exp_month: int | None = None
     exp_year: int | None = None
+
+
+class UpdateTokenRequest(CamelModel):
+    holder: str | None = None
+    exp_month: str | None = None
+    exp_year: str | None = None
 
 
 # ── checkout API ──────────────────────────────────────────────────────────────
@@ -555,7 +632,7 @@ class CheckoutRequest(BaseModel):
     order: CheckoutOrder
     customer: Customer | None = None
     dynamic_billing_descriptor: str | None = None
-    travel: dict[str, Any] | None = None
+    travel: Travel | None = None
     fiscalization: Fiscalization | None = None
 
 
@@ -1475,6 +1552,7 @@ class ProductCreateRequest(BaseModel):
     shop_id: str | None = None
     language: str | None = None
     transaction_type: str | None = None
+    dynamic_billing_descriptor: str | None = None
 
 
 class ProductUpdateRequest(BaseModel):
@@ -1492,6 +1570,7 @@ class ProductUpdateRequest(BaseModel):
     shop_id: str | None = None
     language: str | None = None
     transaction_type: str | None = None
+    dynamic_billing_descriptor: str | None = None
 
 
 class Product(CamelModel):
@@ -1527,6 +1606,8 @@ class ChargeCreditCard(BaseModel):
 
 
 class ChargeAdditionalData(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     contract: list[str] | None = None
     excluded_gateways: list[int] | None = None
     browser: BrowserInfo | None = None
@@ -1550,6 +1631,7 @@ class ChargeRequest(BaseModel):
     customer: Customer | None = None
     additional_data: ChargeAdditionalData | None = None
     fiscalization: Fiscalization | None = None
+    travel: Travel | None = None
 
 
 class CheckupRequest(CamelModel):
@@ -1578,7 +1660,8 @@ class RecipientTokenizationRequest(BaseModel):
     description: str | None = None
     tracking_id: str | None = None
     recipient_billing_address: PayoutAddress | None = None
-    recipient_credit_card: PayoutCreditCard
+    recipient_credit_card: PayoutCreditCard | None = None
+    encrypted_recipient_credit_card: EncryptedRecipientCreditCard | None = None
     recipient: PayoutCustomer | None = None
     additional_data: RecipientTokenizationAdditionalData | None = None
 

@@ -38,6 +38,7 @@ from bepaid.models import (
     CheckoutRequest,
     CheckupRequest,
     CurrencyQueryRequest,
+    EncryptedRecipientCreditCard,
     P2pRequest,
     PaymentRequest,
     PayoutCreditCard,
@@ -53,6 +54,7 @@ from bepaid.models import (
     SplitCreditCard,
     SplitPaymentRequest,
     SubscriptionCreateRequest,
+    UpdateTokenRequest,
 )
 
 
@@ -887,3 +889,56 @@ async def test_async_apm_status_payout_proof_checkup() -> None:
         assert ep.status == "deleted"
     finally:
         await c.aclose()
+
+
+@pytest.mark.asyncio
+async def test_async_update_token() -> None:
+    handlers = {
+        ("POST", "/credit_cards/tok123"): {
+            "expect_version": "3",
+            "expect_body": {
+                "request": {"holder": "John", "exp_month": "12", "exp_year": "2030"}
+            },
+            "json": {
+                "holder": "John",
+                "brand": "visa",
+                "token": "tok123",
+                "exp_month": 12,
+                "exp_year": 2030,
+            },
+        }
+    }
+    async with async_client(handlers) as c:
+        r = await c.update_token(
+            "tok123", UpdateTokenRequest(holder="John", exp_month="12", exp_year="2030")
+        )
+    assert r.token == "tok123"
+
+
+@pytest.mark.asyncio
+async def test_async_recipient_tokenization_encrypted() -> None:
+    handlers = {
+        ("POST", "/transactions/recipient_tokenizations"): {
+            "expect_version": "3",
+            "expect_body": {
+                "request": {
+                    "encrypted_recipient_credit_card": {
+                        "number": "enc",
+                        "holder": "John",
+                        "exp_month": "01",
+                        "exp_year": "2030",
+                    }
+                }
+            },
+            "json": {"token": "rtok"},
+        }
+    }
+    async with async_client(handlers) as c:
+        r = await c.tokenize_recipient_card(
+            RecipientTokenizationRequest(
+                encrypted_recipient_credit_card=EncryptedRecipientCreditCard(
+                    number="enc", holder="John", exp_month="01", exp_year="2030"
+                )
+            )
+        )
+    assert r["token"] == "rtok"

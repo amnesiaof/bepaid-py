@@ -39,6 +39,7 @@ from .models import (
     CaptureResponse,
     CardBalanceRequest,
     CardBalanceResponse,
+    CardNotification,
     ChannelBalance,
     ChargeRequest,
     CheckoutRequest,
@@ -87,6 +88,7 @@ from .models import (
     TokenResponse,
     TrackingIdStatus,
     Transaction,
+    UpdateTokenRequest,
     VerifyP2pResponse,
     VisaAliasPhoneRequest,
     VisaAliasPhoneResponse,
@@ -368,6 +370,15 @@ class AsyncBepaidClient:
         data = await self._request(
             "POST",
             f"{self._base_gateway}/credit_cards",
+            {"request": req.model_dump(by_alias=True, exclude_none=True)},
+            api_version="3",
+        )
+        return TokenResponse.model_validate(data)
+
+    async def update_token(self, token: str, req: UpdateTokenRequest) -> TokenResponse:
+        data = await self._request(
+            "POST",
+            f"{self._base_gateway}/credit_cards/{token}",
             {"request": req.model_dump(by_alias=True, exclude_none=True)},
             api_version="3",
         )
@@ -1043,6 +1054,9 @@ class BepaidClient:
     def create_token(self, req: CreateTokenRequest) -> TokenResponse:
         return self._invoke("create_token", req)
 
+    def update_token(self, token: str, req: UpdateTokenRequest) -> TokenResponse:
+        return self._invoke("update_token", token, req)
+
     def create_tokenization(
         self, req: TokenizationRequest, request_id: str | None = None
     ) -> Transaction:
@@ -1298,6 +1312,13 @@ def parse_checkout_webhook(body: str) -> CheckoutStatus:
     notification, e.g. a token-expiry notice without a ``transaction``
     envelope)."""
     return CheckoutStatus.model_validate_json(body)
+
+
+def parse_card_notification(body: str) -> CardNotification:
+    """Parse a card-notification webhook payload (flat card info sent when
+    ``credit_card.notification_url`` / ``settings.card_notification_url`` is
+    set)."""
+    return CardNotification.model_validate_json(body)
 
 
 def verify_webhook_signature(

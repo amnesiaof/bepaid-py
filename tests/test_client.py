@@ -10,6 +10,7 @@ from pydantic import ValidationError
 
 from bepaid import AsyncBepaidClient, BepaidClient, BepaidError, models
 from bepaid.client import (
+    parse_card_notification,
     parse_checkout_webhook,
     parse_subscription_webhook,
     parse_webhook,
@@ -27,6 +28,8 @@ from bepaid.models import (
     BalanceRequest,
     CancelSubscriptionRequest,
     CaptureRequest,
+    CardNotification,
+    ChargeAdditionalData,
     ChargeCreditCard,
     ChargeRequest,
     CheckoutOrder,
@@ -39,6 +42,7 @@ from bepaid.models import (
     CustomerRecord,
     CustomField,
     CustomFields,
+    EncryptedCreditCard,
     EripDevice,
     Fiscalization,
     FiscalizationPosition,
@@ -78,7 +82,13 @@ from bepaid.models import (
     SplitPaymentRequest,
     SplitV2Item,
     SubscriptionCreateRequest,
+    ThreeDSecureAdvanced,
     TokenizationRequest,
+    Travel,
+    TravelAirline,
+    TravelAirlineLeg,
+    TravelPassenger,
+    UpdateTokenRequest,
     VoidRequest,
 )
 
@@ -3503,3 +3513,245 @@ def test_checkup() -> None:
     )
     assert t.status == "successful"
     assert t.amount == 100
+
+
+def test_update_token() -> None:
+    c = client(
+        {
+            ("POST", "/credit_cards/tok123"): {
+                "expect_version": "3",
+                "expect_body": {
+                    "request": {"holder": "John", "exp_month": "12", "exp_year": "2030"}
+                },
+                "json": {
+                    "holder": "John",
+                    "brand": "visa",
+                    "last_4": "0000",
+                    "token": "tok123",
+                    "exp_month": 12,
+                    "exp_year": 2030,
+                },
+            }
+        }
+    )
+    r = c.update_token(
+        "tok123", UpdateTokenRequest(holder="John", exp_month="12", exp_year="2030")
+    )
+    assert r.token == "tok123"
+    assert r.exp_month == 12
+
+
+def test_payment_encrypted_card_three_ds_travel() -> None:
+    c = client(
+        {
+            ("POST", "/transactions/payments"): {
+                "expect_version": "3",
+                "expect_body": {
+                    "request": {
+                        "amount": "10.00",
+                        "currency": "BYN",
+                        "test": False,
+                        "description": "d",
+                        "tracking_id": "t",
+                        "encrypted_credit_card": {
+                            "number": "enc-num",
+                            "holder": "John",
+                            "exp_month": "01",
+                            "exp_year": "2030",
+                            "verification_value": "enc-cvv",
+                        },
+                        "three_d_secure": {"advanced": True},
+                        "travel": {
+                            "airline": {
+                                "ticket_number": "12345678901234",
+                                "legs": [{"airline_code": "BA", "class": "Y"}],
+                                "passengers": [
+                                    {"first_name": "John", "last_name": "Doe"}
+                                ],
+                            }
+                        },
+                    }
+                },
+                "json": {"transaction": {"uid": "u1", "status": "successful"}},
+            }
+        }
+    )
+    t = c.create_payment(
+        PaymentRequest(
+            amount="10.00",
+            currency="BYN",
+            test=False,
+            description="d",
+            tracking_id="t",
+            encrypted_credit_card=EncryptedCreditCard(
+                number="enc-num",
+                holder="John",
+                exp_month="01",
+                exp_year="2030",
+                verification_value="enc-cvv",
+            ),
+            three_d_secure=ThreeDSecureAdvanced(advanced=True),
+            travel=Travel(
+                airline=TravelAirline(
+                    ticket_number="12345678901234",
+                    legs=[TravelAirlineLeg(airline_code="BA", travel_class="Y")],
+                    passengers=[TravelPassenger(first_name="John", last_name="Doe")],
+                )
+            ),
+        )
+    )
+    assert t.status == "successful"
+
+
+def test_charge_travel_and_kyc_passthrough() -> None:
+    c = client(
+        {
+            ("POST", "/services/credit_cards/charges"): {
+                "expect_version": "3",
+                "expect_body": {
+                    "request": {
+                        "amount": 100,
+                        "currency": "BYN",
+                        "description": "d",
+                        "credit_card": {"token": "tok1"},
+                        "travel": {"airline": {"agency_code": "AGT"}},
+                        "additional_data": {
+                            "kyc_answers": {"source": "web", "profile": "quickbit-1"},
+                            "customer_id_data": {"document_type": "passport"},
+                        },
+                    }
+                },
+                "json": {"transaction": {"uid": "u2", "status": "successful"}},
+            }
+        }
+    )
+    t = c.charge_saved_card(
+        ChargeRequest(
+            amount=100,
+            currency="BYN",
+            description="d",
+            credit_card=ChargeCreditCard(token="tok1"),
+            travel=Travel(airline=TravelAirline(agency_code="AGT")),
+            additional_data=ChargeAdditionalData(
+                kyc_answers={"source": "web", "profile": "quickbit-1"},
+                customer_id_data={"document_type": "passport"},
+            ),
+        )
+    )
+    assert t.status == "successful"
+
+
+def test_transaction_conversion() -> None:
+    c = client(
+        {
+            ("GET", "/transactions/u3"): {
+                "json": {
+                    "transaction": {
+                        "uid": "u3",
+                        "conversion": {
+                            "converted_amount": 1234,
+                            "converted_currency": "USD",
+                            "exchange_rate": {"BYN_TO_USD": 0.31},
+                            "exchange_rate_ids": ["id1"],
+                            "exchange_rate_date": "2026-09-21T10:00:00Z",
+                        },
+                    }
+                }
+            }
+        }
+    )
+    t = c.get_transaction("u3")
+    assert t.conversion is not None
+    assert t.conversion.converted_amount == 1234
+    assert t.conversion.exchange_rate == {"BYN_TO_USD": 0.31}
+    assert t.conversion.exchange_rate_ids == ["id1"]
+
+
+def test_parse_card_notification() -> None:
+    n = parse_card_notification(
+        json.dumps(
+            {
+                "holder": "John Doe",
+                "stamp": "st",
+                "brand": "visa",
+                "last_4": "0000",
+                "first_1": "4",
+                "token": "tok1",
+                "product": None,
+                "bin": "4",
+                "bin_8": "40000000",
+                "issuer_country": None,
+                "issuer_name": None,
+                "exp_month": 1,
+                "exp_year": 2028,
+                "image": "https://example.com/card.png",
+            }
+        )
+    )
+    assert isinstance(n, CardNotification)
+    assert n.image == "https://example.com/card.png"
+    assert n.exp_month == 1
+
+
+def test_credit_card_notification_url() -> None:
+    c = client(
+        {
+            ("POST", "/transactions/tokenizations"): {
+                "expect_version": "3",
+                "expect_body": {
+                    "request": {
+                        "amount": 1,
+                        "currency": "BYN",
+                        "description": "d",
+                        "credit_card": {
+                            "token": "tok1",
+                            "notification_url": "https://example.com/hook",
+                        },
+                    }
+                },
+                "json": {"transaction": {"uid": "u4", "status": "successful"}},
+            }
+        }
+    )
+    t = c.create_tokenization(
+        TokenizationRequest(
+            amount=1,
+            currency="BYN",
+            description="d",
+            credit_card=CreditCardRaw(
+                token="tok1", notification_url="https://example.com/hook"
+            ),
+        )
+    )
+    assert t.status == "successful"
+
+
+def test_product_dynamic_billing_descriptor() -> None:
+    c = client(
+        {
+            ("POST", "/products"): {
+                "expect_body": {
+                    "name": "n",
+                    "description": "d",
+                    "currency": "BYN",
+                    "amount": 100,
+                    "dynamic_billing_descriptor": "MY SHOP",
+                },
+                "json": {"id": "p1", "name": "n"},
+            },
+            ("PUT", "/products/p1"): {
+                "expect_body": {"dynamic_billing_descriptor": "MY SHOP 2"},
+                "json": {},
+            },
+        }
+    )
+    c.create_product(
+        ProductCreateRequest(
+            name="n",
+            description="d",
+            currency="BYN",
+            amount=100,
+            dynamic_billing_descriptor="MY SHOP",
+        )
+    )
+    c.update_product("p1", ProductUpdateRequest(dynamic_billing_descriptor="MY SHOP 2"))
