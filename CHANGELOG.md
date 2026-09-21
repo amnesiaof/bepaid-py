@@ -5,7 +5,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.7.0] - 2026-09-21
+
+### Added
+- Split payment v2 recipients: `SplitV2Item` (amount, tax_id, company_name, bank_account, bank_bic, description, legal_address, mailing_address, country, city, postal_code, contact_email, contact_phone, memo) passed via `additional_data={"split": [SplitV2Item(...), ...]}`, plus `smart_routing_options.allow_halva` in `AdditionalData`.
+- Fiscalization on saved-card charges (`ChargeRequest.fiscalization`), refunds (`RefundRequest.fiscalization: true`) and payment-token creation (`CheckoutRequest.fiscalization`); transactions now decode the `fiscalization` response block with `FiscalizationInfo`, `FiscalizationReceipt` and `FiscalizationReceiptInfo`.
+- Paginated merchant reports: `PaginatedReportParams`/`ReportListV3Request` and `get_paginated_reports` (async + sync) posting to `/api/reports` with `X-API-Version: 3` (`from`/`to`, `starting_after`/`ending_before`/`manual_correction_from`/`manual_correction_to`); `ReportListResponse` gains `has_more`, `first_object_id` and `last_object_id`.
+- Cascading: typed `AdditionalData.excluded_gateways: list[int]` for retries with `duplicate_check: false` (matching `ChargeAdditionalData.excluded_gateways` and `PaymentInfo.gateway_id`).
 
 ## [0.6.0] - 2026-09-17
 
@@ -257,7 +263,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Direct (APM) API: `create_apm_payment`, `apm_refund`, `apm_full_refund`.
 - Webhooks: `verify_webhook_auth` and `WebhookNotification` parsing.
 
-[Unreleased]: https://github.com/amnesiaof/bepaid-py/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/amnesiaof/bepaid-py/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/amnesiaof/bepaid-py/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.12...v0.6.0
 [0.5.12]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.11...v0.5.12
 [0.5.11]: https://github.com/amnesiaof/bepaid-py/compare/v0.5.10...v0.5.11

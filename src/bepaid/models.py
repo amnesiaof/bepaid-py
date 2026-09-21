@@ -76,6 +76,7 @@ class AdditionalData(CamelModel):
     referer: str | None = None
     masterpass: MasterpassData | None = None
     komplat: dict[str, Any] | None = None
+    excluded_gateways: list[int] | None = None
 
 
 class CreditCardRaw(CamelModel):
@@ -169,6 +170,50 @@ class FiscalizationPosition(CamelModel):
 class Fiscalization(CamelModel):
     external_id: str
     positions: list[FiscalizationPosition]
+
+
+class FiscalizationReceiptInfo(CamelModel):
+    kkm_id: int | None = None
+    id: str | None = None
+    shift_id: int | None = None
+    serial_id: str | None = None
+    serial_shift_id: str | None = None
+    issue_time: str | None = None
+    operation_type: str | None = None
+    payment_type: str | None = None
+    currency_code: str | None = None
+    subtotal_amount: str | None = None
+    total_amount: str | None = None
+    cashier_code: int | None = None
+    cashier_name: str | None = None
+    receipt_num: str | None = None
+    ofd_receipt_id: str | None = None
+    ofd_qr_code: str | None = None
+
+
+class FiscalizationReceipt(CamelModel):
+    id: str | None = None
+    serial_id: str | None = None
+    receipt_num: str | None = None
+    created_at: str | None = None
+    ofd_id: str | None = None
+    ofd_link: str | None = None
+    ofd_qr_code: str | None = None
+    total_amount: str | None = None
+    receipt_info: FiscalizationReceiptInfo | None = None
+
+
+class FiscalizationInfo(CamelModel):
+    """Fiscalization block of a transaction response."""
+
+    type: str | None = None
+    id: str | None = None
+    external_id: str | None = None
+    status: str | None = None
+    code: str | None = None
+    message: str | None = None
+    friendly_message: str | None = None
+    receipts: list[FiscalizationReceipt] | None = None
 
 
 class CustomField(BaseModel):
@@ -277,6 +322,7 @@ class Transaction(_ApmResult):
     three_d_secure_verification: dict[str, Any] | None = None
     additional_data: dict[str, Any] | None = None
     avs_cvc_verification: dict[str, Any] | None = None
+    fiscalization: FiscalizationInfo | None = None
     errors: dict[str, Any] | None = None
 
 
@@ -376,6 +422,7 @@ class RefundRequest(CamelModel):
     reason: str
     tracking_id: str | None = None
     additional_data: AdditionalData | None = None
+    fiscalization: bool | None = None
 
 
 class RefundResponse(CamelModel):
@@ -509,6 +556,7 @@ class CheckoutRequest(BaseModel):
     customer: Customer | None = None
     dynamic_billing_descriptor: str | None = None
     travel: dict[str, Any] | None = None
+    fiscalization: Fiscalization | None = None
 
 
 class CheckoutResponse(CamelModel):
@@ -1306,10 +1354,30 @@ class ReportListRequest(BaseModel):
 class ReportListResponse(CamelModel):
     transactions: list[ReportTransaction]
     count: int | None = None
+    has_more: bool | None = None
+    first_object_id: str | None = None
+    last_object_id: str | None = None
 
 
 class ReportCountRequest(BaseModel):
     report_params: ReportCountParams
+
+
+class PaginatedReportParams(BaseModel):
+    date_type: str
+    from_: str = Field(serialization_alias="from")
+    to: str
+    status: str
+    payment_method_type: str
+    time_zone: str
+    starting_after: str | None = None
+    ending_before: str | None = None
+    manual_correction_from: str | None = None
+    manual_correction_to: str | None = None
+
+
+class ReportListV3Request(BaseModel):
+    report_params: PaginatedReportParams
 
 
 class ReportCountResult(CamelModel):
@@ -1336,6 +1404,32 @@ class SplitCreditCard(BaseModel):
 class SplitAdditionalData(BaseModel):
     contract: str | None = None
     split: dict[str, int]
+
+
+class SplitV2Item(CamelModel):
+    """A split v2 recipient of `additional_data.split`.
+
+    The v2 split is an array (in v1 `additional_data.split` is a
+    ``{shop_id: amount}`` dict). Send it through the ``AdditionalData``
+    model's open ``extra="allow"`` namespace::
+
+        additional_data={"split": [SplitV2Item(amount=500, tax_id="123"), ...]}
+    """
+
+    amount: int
+    tax_id: str
+    company_name: str | None = None
+    bank_account: str | None = None
+    bank_bic: str | None = None
+    description: str | None = None
+    legal_address: str | None = None
+    mailing_address: str | None = None
+    country: str | None = None
+    city: str | None = None
+    postal_code: str | None = None
+    contact_email: str | None = None
+    contact_phone: str | None = None
+    memo: str | None = None
 
 
 class SplitPaymentRequest(BaseModel):
@@ -1434,7 +1528,7 @@ class ChargeCreditCard(BaseModel):
 
 class ChargeAdditionalData(BaseModel):
     contract: list[str] | None = None
-    excluded_gateways: list[str] | None = None
+    excluded_gateways: list[int] | None = None
     browser: BrowserInfo | None = None
 
 
@@ -1455,6 +1549,7 @@ class ChargeRequest(BaseModel):
     credit_card: ChargeCreditCard
     customer: Customer | None = None
     additional_data: ChargeAdditionalData | None = None
+    fiscalization: Fiscalization | None = None
 
 
 class CheckupRequest(CamelModel):

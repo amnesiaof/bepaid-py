@@ -55,6 +55,7 @@ from bepaid.models import (
     MasterpassLoginResponse,
     MasterpassParams,
     P2pRequest,
+    PaginatedReportParams,
     PaymentRequest,
     PayoutAddress,
     PayoutCreditCard,
@@ -70,10 +71,12 @@ from bepaid.models import (
     ReportCountParams,
     ReportCountRequest,
     ReportListRequest,
+    ReportListV3Request,
     ReportParams,
     SplitAdditionalData,
     SplitCreditCard,
     SplitPaymentRequest,
+    SplitV2Item,
     SubscriptionCreateRequest,
     TokenizationRequest,
     VoidRequest,
@@ -655,6 +658,41 @@ def test_create_payment_serializes_custom_fields() -> None:
     )
 
 
+def test_create_payment_serializes_excluded_gateways() -> None:
+    c = client(
+        {
+            ("POST", "/transactions/payments"): {
+                "expect_version": "3",
+                "json": {"transaction": {"uid": "u1"}},
+                "expect_body": {
+                    "request": {
+                        "amount": "700",
+                        "currency": "USD",
+                        "test": True,
+                        "description": "Test transaction",
+                        "tracking_id": "tid",
+                        "duplicate_check": False,
+                        "additional_data": {
+                            "excluded_gateways": [1067, 2001],
+                        },
+                    }
+                },
+            }
+        }
+    )
+    c.create_payment(
+        PaymentRequest(
+            amount="700",
+            currency="USD",
+            test=True,
+            description="Test transaction",
+            tracking_id="tid",
+            duplicate_check=False,
+            additional_data=AdditionalData(excluded_gateways=[1067, 2001]),
+        )
+    )
+
+
 @pytest.mark.parametrize(
     "token",
     [
@@ -765,6 +803,38 @@ def test_refund() -> None:
     assert resp.type == "refund"
 
 
+def test_refund_serializes_fiscalization() -> None:
+    c = client(
+        {
+            ("POST", "/transactions/refunds"): {
+                "expect_version": "3",
+                "json": {
+                    "transaction": {
+                        "uid": "r1",
+                        "parent_uid": "p1",
+                        "type": "refund",
+                        "status": "successful",
+                    }
+                },
+                "expect_body": {
+                    "request": {
+                        "parent_uid": "p1",
+                        "amount": 1500,
+                        "reason": "Client request",
+                        "fiscalization": True,
+                    }
+                },
+            }
+        }
+    )
+    resp = c.refund(
+        RefundRequest(
+            parent_uid="p1", amount=1500, reason="Client request", fiscalization=True
+        )
+    )
+    assert resp.status == "successful"
+
+
 def test_charge_saved_card() -> None:
     c = client(
         {
@@ -796,6 +866,77 @@ def test_charge_saved_card() -> None:
         )
     )
     assert resp.uid == "1-310b0da80b"
+    assert resp.status == "successful"
+
+
+def test_charge_saved_card_serializes_fiscalization() -> None:
+    c = client(
+        {
+            ("POST", "/services/credit_cards/charges"): {
+                "expect_version": "3",
+                "json": {
+                    "transaction": {
+                        "uid": "1-310b0da80b",
+                        "type": "payment",
+                        "status": "successful",
+                    }
+                },
+                "expect_body": {
+                    "request": {
+                        "amount": 700,
+                        "currency": "USD",
+                        "description": "Saved card charge",
+                        "credit_card": {"token": "tok_123"},
+                        "fiscalization": {
+                            "external_id": "fisc-1",
+                            "positions": [
+                                {
+                                    "name": "Product",
+                                    "type": "service",
+                                    "amount": 700,
+                                    "quantity": 1.0,
+                                    "untaxed": False,
+                                    "taxes": [
+                                        {
+                                            "id": "vat-12",
+                                            "percent": "12",
+                                            "type": "vat",
+                                            "inclusive": True,
+                                        }
+                                    ],
+                                }
+                            ],
+                        },
+                    }
+                },
+            }
+        }
+    )
+    resp = c.charge_saved_card(
+        ChargeRequest(
+            amount=700,
+            currency="USD",
+            description="Saved card charge",
+            credit_card=ChargeCreditCard(token="tok_123"),
+            fiscalization=Fiscalization(
+                external_id="fisc-1",
+                positions=[
+                    FiscalizationPosition(
+                        name="Product",
+                        type="service",
+                        amount=700,
+                        quantity=1.0,
+                        untaxed=False,
+                        taxes=[
+                            FiscalizationTax(
+                                id="vat-12", percent="12", type="vat", inclusive=True
+                            )
+                        ],
+                    )
+                ],
+            ),
+        )
+    )
     assert resp.status == "successful"
 
 
@@ -859,6 +1000,71 @@ def test_get_transaction() -> None:
     assert t.code == "S.0000"
     assert t.credit_card is not None
     assert t.credit_card.brand == "visa"
+
+
+def test_get_transaction_parses_fiscalization() -> None:
+    c = client(
+        {
+            ("GET", "/transactions/2f4d67ff"): {
+                "json": {
+                    "transaction": {
+                        "uid": "2f4d67ff",
+                        "status": "successful",
+                        "payment": {"gateway_id": 3549, "status": "successful"},
+                        "fiscalization": {
+                            "type": "payment",
+                            "id": "fisc-id-1",
+                            "external_id": "merchant-ext-1",
+                            "status": "successful",
+                            "code": "S.8025",
+                            "message": "fiscalized",
+                            "friendly_message": "fiscalized",
+                            "receipts": [
+                                {
+                                    "id": "receipt-1",
+                                    "serial_id": "9",
+                                    "receipt_num": "1234567890233",
+                                    "created_at": "2024-02-21T11:14:44Z",
+                                    "ofd_id": "706806547",
+                                    "ofd_link": "link.com/receipt",
+                                    "ofd_qr_code": "link.com/receipt",
+                                    "total_amount": "18700",
+                                    "receipt_info": {
+                                        "kkm_id": 49,
+                                        "id": "receipt-info-1",
+                                        "shift_id": 2,
+                                        "serial_id": "9",
+                                        "serial_shift_id": "4",
+                                        "issue_time": "2024-02-21T11:14:44Z",
+                                        "operation_type": "OPERATION_TYPE_SALE",
+                                        "payment_type": "PAYMENT_TYPE_CARD",
+                                        "currency_code": "USD",
+                                        "subtotal_amount": "10000",
+                                        "total_amount": "10000",
+                                        "cashier_code": 6207,
+                                        "cashier_name": "Robot",
+                                        "receipt_num": "1234567890233",
+                                        "ofd_receipt_id": "706806547",
+                                        "ofd_qr_code": "link.com/receipt",
+                                    },
+                                }
+                            ],
+                        },
+                    }
+                }
+            }
+        }
+    )
+    t = c.get_transaction("2f4d67ff")
+    assert t.payment is not None and t.payment.gateway_id == 3549
+    assert t.fiscalization is not None
+    assert t.fiscalization.status == "successful"
+    assert t.fiscalization.receipts is not None
+    receipt = t.fiscalization.receipts[0]
+    assert receipt.ofd_link == "link.com/receipt"
+    assert receipt.receipt_info is not None
+    assert receipt.receipt_info.cashier_name == "Robot"
+    assert receipt.receipt_info.kkm_id == 49
 
 
 def test_transaction_status_by_tracking_id() -> None:
@@ -1012,6 +1218,46 @@ def test_payment_token_happy_path() -> None:
     )
     assert p.token == "3241e439f8c87d941d92621a4bdc030d"
     assert p.redirect_url and "checkout.bepaid.by/v2/checkout" in p.redirect_url
+
+
+def test_create_payment_token_serializes_fiscalization() -> None:
+    c = client(
+        {
+            ("POST", "/payments/tokens"): {
+                "json": {"checkout": {"token": "tok1"}},
+                "expect_body": {
+                    "checkout": {
+                        "test": True,
+                        "transaction_type": "payment",
+                        "order": {"currency": "USD", "amount": 100},
+                        "fiscalization": {
+                            "external_id": "fisc-2",
+                            "positions": [
+                                {
+                                    "name": "Product",
+                                    "type": "service",
+                                    "amount": 100,
+                                }
+                            ],
+                        },
+                    }
+                },
+            }
+        }
+    )
+    p = c.create_payment_token(
+        CheckoutRequest(
+            test=True,
+            order=CheckoutOrder(currency="USD", amount=100),
+            fiscalization=Fiscalization(
+                external_id="fisc-2",
+                positions=[
+                    FiscalizationPosition(name="Product", type="service", amount=100)
+                ],
+            ),
+        )
+    )
+    assert p.token == "tok1"
 
 
 def test_apm_payment_and_refund() -> None:
@@ -2423,6 +2669,66 @@ def test_get_report_count_happy_path() -> None:
     assert r.transactions.count == 2
 
 
+def test_get_paginated_reports_happy_path() -> None:
+    c = client(
+        {
+            ("POST", "/api/reports"): {
+                "expect_version": "3",
+                "json": {
+                    "transactions": [
+                        {
+                            "uid": "20527-b7ea8c95f4",
+                            "id": 28859,
+                            "type": "authorization",
+                            "status": "failed",
+                            "amount": 1000,
+                            "currency": "USD",
+                        }
+                    ],
+                    "count": 1,
+                    "has_more": True,
+                    "first_object_id": "28859",
+                    "last_object_id": "28860",
+                },
+                "expect_body": {
+                    "report_params": {
+                        "date_type": "created_at",
+                        "from": "2022-01-25 00:00:00",
+                        "to": "2022-01-27 23:59:59",
+                        "status": "incomplete",
+                        "payment_method_type": "credit_card",
+                        "time_zone": "Etc/UTC",
+                        "starting_after": "28859",
+                        "ending_before": "28861",
+                        "manual_correction_from": "2022-01-26 00:00:00",
+                        "manual_correction_to": "2022-01-27 23:59:59",
+                    }
+                },
+            }
+        }
+    )
+    r = c.get_paginated_reports(
+        ReportListV3Request(
+            report_params=PaginatedReportParams(
+                date_type="created_at",
+                from_="2022-01-25 00:00:00",
+                to="2022-01-27 23:59:59",
+                status="incomplete",
+                payment_method_type="credit_card",
+                time_zone="Etc/UTC",
+                starting_after="28859",
+                ending_before="28861",
+                manual_correction_from="2022-01-26 00:00:00",
+                manual_correction_to="2022-01-27 23:59:59",
+            )
+        )
+    )
+    assert r.count == 1
+    assert r.has_more is True
+    assert r.first_object_id == "28859"
+    assert r.last_object_id == "28860"
+
+
 def test_get_channel_balances_happy_path() -> None:
     c = client(
         {
@@ -2476,6 +2782,61 @@ def test_create_split_payment_happy_path() -> None:
     assert len(r.splits) == 2
     assert r.splits[0].parent is True
     assert r.splits[1].parent_uid == "21-99834feb0b"
+
+
+def test_create_payment_serializes_split_v2() -> None:
+    split_items = [
+        SplitV2Item(amount=500, tax_id="171234567", company_name="Shop A"),
+        SplitV2Item(amount=200, tax_id="222222222", company_name="Shop B"),
+    ]
+    assert sum(item.amount for item in split_items) == 700
+    c = client(
+        {
+            ("POST", "/transactions/payments"): {
+                "expect_version": "3",
+                "json": {"transaction": {"uid": "u1"}},
+                "expect_body": {
+                    "request": {
+                        "amount": "700",
+                        "currency": "USD",
+                        "test": True,
+                        "description": "Test transaction",
+                        "tracking_id": "tid",
+                        "additional_data": {
+                            "split": [
+                                {
+                                    "amount": 500,
+                                    "tax_id": "171234567",
+                                    "company_name": "Shop A",
+                                },
+                                {
+                                    "amount": 200,
+                                    "tax_id": "222222222",
+                                    "company_name": "Shop B",
+                                },
+                            ],
+                            "smart_routing_options": {"allow_halva": True},
+                            "contract": ["recurring", "card_on_file"],
+                        },
+                    }
+                },
+            }
+        }
+    )
+    c.create_payment(
+        PaymentRequest(
+            amount="700",
+            currency="USD",
+            test=True,
+            description="Test transaction",
+            tracking_id="tid",
+            additional_data=AdditionalData(
+                split=split_items,
+                smart_routing_options={"allow_halva": True},
+                contract=["recurring", "card_on_file"],
+            ),
+        )
+    )
 
 
 _PRODUCT = {

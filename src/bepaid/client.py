@@ -78,6 +78,7 @@ from .models import (
     ReportCountResponse,
     ReportListRequest,
     ReportListResponse,
+    ReportListV3Request,
     SplitPaymentRequest,
     SplitPaymentResponse,
     Subscription,
@@ -834,6 +835,17 @@ class AsyncBepaidClient:
         )
         return ReportCountResponse.model_validate(data)
 
+    async def get_paginated_reports(
+        self, req: ReportListV3Request
+    ) -> ReportListResponse:
+        data = await self._request(
+            "POST",
+            f"{self._base_merchant}/api/reports",
+            req.model_dump(by_alias=True, exclude_none=True),
+            api_version="3",
+        )
+        return ReportListResponse.model_validate(data)
+
     async def get_channel_balances(
         self, gateway_id: int, currency: str | None = None
     ) -> list[ChannelBalance]:
@@ -1228,6 +1240,9 @@ class BepaidClient:
 
     def get_report_count(self, req: ReportCountRequest) -> ReportCountResponse:
         return self._invoke("get_report_count", req)
+
+    def get_paginated_reports(self, req: ReportListV3Request) -> ReportListResponse:
+        return self._invoke("get_paginated_reports", req)
 
     def get_channel_balances(
         self, gateway_id: int, currency: str | None = None
